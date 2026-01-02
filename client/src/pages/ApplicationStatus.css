@@ -1,0 +1,158 @@
+.status-page {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    margin-bottom: 2rem;
+    transition: color 0.2s;
+}
+
+.back-link:hover {
+    color: white;
+}
+
+.status-card {
+    padding: 3rem;
+}
+
+.status-header {
+    text-align: center;
+    margin-bottom: 3rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 2rem;
+}
+
+.status-header h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.applied-date {
+    color: var(--text-muted);
+    font-size: 1rem;
+}
+
+.result-box {
+    text-align: center;
+    padding: 3rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 3rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.result-box.success {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.result-box.danger {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.result-box.processing {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.icon-wrapper {
+    margin-bottom: 1.5rem;
+    color: currentColor;
+}
+
+.result-box.success .icon-wrapper {
+    color: #10b981;
+}
+
+.result-box.danger .icon-wrapper {
+    color: #ef4444;
+}
+
+.result-box.processing .icon-wrapper {
+    color: #3b82f6;
+}
+
+.result-box h2 {
+    font-size: 1.75rem;
+    margin-bottom: 1rem;
+}
+
+.result-box p {
+    color: var(--text-main);
+    line-height: 1.6;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.celebration-icon {
+    margin-top: 1.5rem;
+    color: #f59e0b;
+    animation: float 2s infinite ease-in-out;
+}
+
+/* Timeline */
+.status-timeline {
+    border-left: 2px solid rgba(255, 255, 255, 0.05);
+    margin-left: 1rem;
+    padding-left: 2rem;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 2rem;
+}
+
+.timeline-item:last-child {
+    margin-bottom: 0;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: calc(-2rem - 7px);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #1e293b;
+    border: 2px solid #64748b;
+}
+
+.timeline-item.completed .timeline-marker {
+    background: #6366f1;
+    border-color: #6366f1;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+}
+
+.timeline-item.completed.success .timeline-marker {
+    background: #10b981;
+    border-color: #10b981;
+}
+
+.timeline-item.completed.danger .timeline-marker {
+    background: #ef4444;
+    border-color: #ef4444;
+}
+
+.timeline-content h3 {
+    font-size: 1.125rem;
+    margin-bottom: 0.25rem;
+}
+
+.timeline-content p {
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+}
+
+.loading-container,
+.error-container {
+    padding: 100px;
+    text-align: center;
+    color: var(--text-muted);
+}

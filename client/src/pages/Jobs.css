@@ -1,0 +1,289 @@
+/* Modern Jobs Page Styling */
+
+/* Toolbar Container */
+.jobs-toolbar {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center;
+    width: 100% !important;
+    margin-bottom: 2rem;
+    padding: 0.375rem 1rem;
+    background: #1e293b80;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    backdrop-filter: blur(8px);
+    box-sizing: border-box;
+    flex-wrap: nowrap;
+}
+
+.filter-group {
+    display: flex;
+    gap: 0.25rem;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 0.25rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    flex-shrink: 0;
+    align-items: center;
+    height: 40px;
+    margin-right: auto;
+    /* Push search to the right */
+}
+
+.filter-btn {
+    padding: 0 1.25rem;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: transparent;
+    color: #94a3b8;
+    border: none;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.filter-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.filter-btn.active {
+    background: #6366f1;
+    color: white;
+    box-shadow: 0 1px 4px rgba(99, 102, 241, 0.2);
+}
+
+/* Search Bar */
+/* Compact Search Bar - Right Aligned with internal icon */
+.search-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 260px;
+    transform: translate(230px, 25px);
+}
+
+.search-input {
+    width: 100%;
+    padding: 0.5rem 2.5rem 0.5rem 1rem;
+    /* Space for icon on right */
+    border-radius: 9999px;
+    /* Pill shape like sketch */
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 23, 42, 0.6);
+    color: white;
+    font-size: 0.875rem;
+    transition: all 0.3s ease;
+    height: 38px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    background: rgba(15, 23, 42, 0.9);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.search-input::placeholder {
+    color: #64748b;
+}
+
+.search-icon {
+    position: absolute;
+    right: 12px;
+    color: #64748b;
+    pointer-events: none;
+}
+
+/* Legacy search-btn styles removed */
+
+/* Table Styles - Premium Look */
+.jobs-table-container {
+    background: #1e293b80;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    overflow-x: auto;
+    /* Allow horizontal scrolling on small screens */
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Using a new class identifying the Data Grid to avoid any conflicts */
+.jobs-data-grid {
+    display: grid !important;
+    /* Fixed columns to ensure single line alignment */
+    grid-template-columns: minmax(180px, 0.6fr) minmax(150px, 1.5fr) minmax(120px, 1fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(120px, 1fr) 120px !important;
+    gap: 0.5rem;
+    align-items: center;
+    min-width: 1000px;
+    /* Force minimum width to prevent squishing */
+}
+
+.jobs-header {
+    padding: 0.5rem 1rem 0.5rem 5rem;
+    background: rgba(15, 23, 42, 0.4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
+
+.jobs-row {
+    padding: 0.6rem 1rem 0.6rem 5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background-color 0.2s ease;
+    font-size: 0.875rem;
+}
+
+.jobs-row:last-child {
+    border-bottom: none;
+}
+
+.jobs-row:hover {
+    background-color: rgba(30, 41, 59, 0.6);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: rgba(99, 102, 241, 0.2);
+    z-index: 1;
+    position: relative;
+}
+
+/* Cell content styling for single line */
+.jobs-data-grid>div {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Remove overflow restriction for Actions cell to show buttons/tooltips if needed,
+   but flex container usually handles it. Kept specifically for text cells. */
+.actions-cell {
+    overflow: visible !important;
+    display: flex !important;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.job-title-link {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: #f1f5f9;
+    text-decoration: none;
+    transition: color 0.2s;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.job-title-link:hover {
+    color: #818cf8;
+}
+
+.job-cell-sub {
+    font-size: 0.875rem;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Badges */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.badge-open {
+    background: rgba(99, 102, 241, 0.1);
+    color: #a5b4fc;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.05);
+}
+
+.badge-open .badge-dot {
+    background-color: #818cf8;
+    box-shadow: 0 0 8px #818cf8;
+}
+
+.badge-closed {
+    background: rgba(148, 163, 184, 0.1);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.badge-closed .badge-dot {
+    background-color: #94a3b8;
+}
+
+.badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 8px;
+    display: inline-block;
+}
+
+/* Actions */
+.action-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.03);
+    color: #94a3b8;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    transform: translateY(-1px);
+}
+
+/* Hover Colors */
+.action-btn:nth-child(1):hover {
+    color: #818cf8;
+    background: rgba(99, 102, 241, 0.15);
+}
+
+/* View */
+.action-btn:nth-child(2):hover {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.15);
+}
+
+/* Edit */
+.action-btn:nth-child(3):hover {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.15);
+}
+
+/* Delete */
+
+.jobs-empty-state {
+    text-align: center;
+    padding: 6rem 1rem;
+    color: #94a3b8;
+}
