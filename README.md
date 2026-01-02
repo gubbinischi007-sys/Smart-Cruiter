@@ -1,4 +1,5 @@
 # Smart-Cruiter - Applicant Tracking System (ATS)
+*Currently maintained by Nischitha L*
 
 Smart-Cruiter is a comprehensive Applicant Tracking System designed to streamline and automate the hiring process for organizations. The system allows HR teams to create job postings, manage applicants across different stages, schedule interviews, send bulk emails, and generate insightful analytics.
 
