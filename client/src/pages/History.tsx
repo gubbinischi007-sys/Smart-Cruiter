@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { History as HistoryIcon, Clock, LogIn, LogOut, User } from 'lucide-react';
+import { historyApi } from '../services/api';
 import './History.css';
 
 interface Action {
@@ -19,7 +20,7 @@ interface LoginRecord {
 }
 
 interface ApplicationRecord {
-    id: string;
+    id: string; // From database
     name: string;
     email: string;
     job_title: string;
@@ -33,33 +34,82 @@ export default function History() {
     const [appHistory, setAppHistory] = useState<ApplicationRecord[]>([]);
 
     useEffect(() => {
-        // Load history from localStorage
-        const savedHistory = localStorage.getItem('loginHistory');
-        if (savedHistory) {
-            try {
-                const parsedHistory = JSON.parse(savedHistory);
-                parsedHistory.sort((a: LoginRecord, b: LoginRecord) =>
-                    new Date(b.loginTime).getTime() - new Date(a.loginTime).getTime()
-                );
-                setHistory(parsedHistory);
-            } catch (e) {
-                console.error('Failed to parse history', e);
+        const loadHistory = async () => {
+            // 1. Load Login History (keeping in LS as it's private/local for now)
+            const savedHistory = localStorage.getItem('loginHistory');
+            if (savedHistory) {
+                try {
+                    const parsedHistory = JSON.parse(savedHistory);
+                    parsedHistory.sort((a: LoginRecord, b: LoginRecord) =>
+                        new Date(b.loginTime).getTime() - new Date(a.loginTime).getTime()
+                    );
+                    setHistory(parsedHistory);
+                } catch (e) {
+                    console.error('Failed to parse status history', e);
+                }
             }
-        }
 
-        const savedAppHistory = localStorage.getItem('applicationHistory');
-        if (savedAppHistory) {
             try {
-                const parsedAppHistory = JSON.parse(savedAppHistory);
-                // Sort by date descending
-                parsedAppHistory.sort((a: ApplicationRecord, b: ApplicationRecord) =>
-                    new Date(b.date).getTime() - new Date(a.date).getTime()
-                );
-                setAppHistory(parsedAppHistory);
-            } catch (e) {
-                console.error('Failed to parse app history', e);
+                // 2. Fetch Application History from Database
+                const response = await historyApi.getAll();
+                const dbHistory = response.data || [];
+
+                // 3. Check for legacy LocalStorage items to migrate
+                const savedAppHistory = localStorage.getItem('applicationHistory');
+                if (savedAppHistory) {
+                    try {
+                        const localRecords: ApplicationRecord[] = JSON.parse(savedAppHistory);
+
+                        // Find records that aren't in the DB yet (using email + status + job as unique-ish check)
+                        const newToMigrate = localRecords.filter(local =>
+                            !dbHistory.some((db: any) =>
+                                db.email === local.email &&
+                                db.status === local.status &&
+                                db.job_title === local.job_title
+                            )
+                        );
+
+                        if (newToMigrate.length > 0) {
+                            console.log(`Migrating ${newToMigrate.length} local records to database...`);
+                            await Promise.all(newToMigrate.map(record =>
+                                historyApi.create({
+                                    name: record.name,
+                                    email: record.email,
+                                    job_title: record.job_title,
+                                    status: record.status,
+                                    reason: record.reason
+                                })
+                            ));
+
+                            // Re-fetch now that we've migrated
+                            const refreshedResponse = await historyApi.getAll();
+                            setAppHistory(refreshedResponse.data);
+                        } else {
+                            setAppHistory(dbHistory);
+                        }
+
+                        // Clear LS after successful migration/check to prevent background loops
+                        localStorage.removeItem('applicationHistory');
+                    } catch (e) {
+                        console.error('Migration failed', e);
+                        setAppHistory(dbHistory);
+                    }
+                } else {
+                    setAppHistory(dbHistory);
+                }
+            } catch (error) {
+                console.error('Failed to fetch app history from database', error);
             }
-        }
+        };
+
+        loadHistory();
+        window.addEventListener('storage', loadHistory);
+        const interval = setInterval(loadHistory, 3000);
+
+        return () => {
+            window.removeEventListener('storage', loadHistory);
+            clearInterval(interval);
+        };
     }, []);
 
     const formatDate = (dateString: string) => {

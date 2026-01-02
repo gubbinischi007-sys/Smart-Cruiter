@@ -2,6 +2,7 @@ import { ArrowLeft, Share2, Linkedin, MessageCircle, Copy, Check } from 'lucide-
 import { useEffect, useState, FormEvent } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { jobsApi, applicantsApi, analyticsApi, interviewsApi } from '../services/api';
+import { logAction } from '../utils/historyLogger';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Job {
@@ -77,6 +78,7 @@ export default function JobDetail() {
     try {
       const { emailApi } = await import('../services/api');
       await emailApi.sendBulkAcceptance(Array.from(selectedApplicants));
+      logAction(`Bulk accepted ${selectedApplicants.size} applicants`);
       alert('Acceptance emails sent successfully');
       setSelectedApplicants(new Set());
       loadData();
@@ -97,6 +99,7 @@ export default function JobDetail() {
     try {
       const { emailApi } = await import('../services/api');
       await emailApi.sendBulkRejection(Array.from(selectedApplicants));
+      logAction(`Bulk rejected ${selectedApplicants.size} applicants`);
       alert('Rejection emails sent successfully');
       setSelectedApplicants(new Set());
       loadData();
@@ -119,6 +122,7 @@ export default function JobDetail() {
   const handleStageUpdate = async (applicantId: string, newStage: string) => {
     try {
       await applicantsApi.update(applicantId, { stage: newStage });
+      logAction(`Updated applicant ${applicantId} stage to ${newStage}`);
       loadData();
     } catch (error) {
       console.error('Failed to update applicant stage:', error);
@@ -150,6 +154,7 @@ export default function JobDetail() {
         job_id: id,
         ...interviewForm,
       });
+      logAction(`Scheduled interview for applicant ${selectedApplicantForInterview} on ${interviewForm.scheduled_at}`);
       alert('Interview scheduled successfully!');
       setShowInterviewForm(false);
       setSelectedApplicantForInterview(null);

@@ -91,11 +91,13 @@ export default function Login() {
 
     setIsLoading(true);
 
-    const email = formData.email.trim();
-    const password = formData.password.trim();
+
 
     // Fake API call
     setTimeout(() => {
+      const email = formData.email.trim();
+      const password = formData.password.trim();
+
       // User Request: Validate candidate password against registered users
       if (selectedRole === 'applicant') {
         const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
@@ -126,9 +128,34 @@ export default function Login() {
 
         // Use registered name and title
         login(selectedRole, email, user.name, user.roleTitle);
-      } else {
-        // HR logic (existing)
-        login(selectedRole, email, formData.name, formData.roleTitle);
+      } else if (selectedRole === 'hr') {
+        // HR logic - Check against registeredHRs
+        const registeredHRs = JSON.parse(localStorage.getItem('registeredHRs') || '[]');
+        const user = registeredHRs.find((u: any) => u.email === email);
+
+        if (!user) {
+          setModalState({
+            isOpen: true,
+            title: 'Account Not Found',
+            message: 'We could not find an HR account with that email. Please register first (Company PIN required).',
+            type: 'error'
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        if (user.password.trim() !== password) {
+          setModalState({
+            isOpen: true,
+            title: 'Invalid Credentials',
+            message: 'The password you entered is incorrect. Please try again.',
+            type: 'error'
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        login(selectedRole, email, user.name, user.roleTitle);
       }
 
       if (selectedRole === 'hr') {
@@ -173,6 +200,16 @@ export default function Login() {
         // Check if already exists
         const existingUserIndex = registeredUsers.findIndex((u: any) => u.email === email);
 
+        if (existingUserIndex >= 0) {
+          setModalState({
+            isOpen: true,
+            title: 'Account Exists',
+            message: 'You have already registered. Please sign in.',
+            type: 'error'
+          });
+          return;
+        }
+
         const newUser = {
           email: email,
           password: password,
@@ -181,13 +218,7 @@ export default function Login() {
           roleTitle: formData.roleTitle
         };
 
-        if (existingUserIndex >= 0) {
-          registeredUsers[existingUserIndex] = newUser; // Update existing
-        } else {
-          registeredUsers.push(newUser);
-        }
-
-        localStorage.setItem('registeredUsers', JSON.stringify(registeredUsers));
+        registeredUsers.push(newUser);
 
         localStorage.setItem('registeredUsers', JSON.stringify(registeredUsers));
 
@@ -198,6 +229,53 @@ export default function Login() {
           type: 'success'
         });
         setTimeout(() => setViewMode('login'), 2000); // Auto switch after delay, or user closes modal
+      } else if (selectedRole === 'hr') {
+        // HR Registration Logic
+        const registeredHRs = JSON.parse(localStorage.getItem('registeredHRs') || '[]');
+
+        // 1. Check if email exists
+        const existingEmail = registeredHRs.find((u: any) => u.email === email);
+        if (existingEmail) {
+          setModalState({
+            isOpen: true,
+            title: 'Account Exists',
+            message: 'An HR account with this email already exists.',
+            type: 'error'
+          });
+          return;
+        }
+
+        // 2. UNIQUE PASSWORD CHECK (User Request)
+        // Check if ANY existing HR user has the same password
+        const passwordExists = registeredHRs.some((u: any) => u.password === password);
+        if (passwordExists) {
+          setModalState({
+            isOpen: true,
+            title: 'Password Not Allowed',
+            message: 'This password is already in use by another user. Please choose a different password.',
+            type: 'error'
+          });
+          return;
+        }
+
+        const newHR = {
+          email: email,
+          password: password,
+          name: formData.name,
+          role: 'hr',
+          roleTitle: formData.roleTitle
+        };
+
+        registeredHRs.push(newHR);
+        localStorage.setItem('registeredHRs', JSON.stringify(registeredHRs));
+
+        setModalState({
+          isOpen: true,
+          title: 'Registration Successful',
+          message: 'HR Account created successfully. Please sign in.',
+          type: 'success'
+        });
+        setTimeout(() => setViewMode('login'), 2000);
       } else {
         setViewMode('verification');
       }
@@ -636,12 +714,12 @@ export default function Login() {
               className={`modal-btn ${modalState.type}`}
               onClick={() => {
                 closeModal();
-                if (modalState.title === 'Registration Successful') {
+                if (modalState.title === 'Registration Successful' || modalState.title === 'Account Exists') {
                   setViewMode('login');
                 }
               }}
             >
-              {modalState.type === 'success' ? 'Continue' : 'Try Again'}
+              {modalState.title === 'Account Exists' ? 'Sign In' : (modalState.type === 'success' ? 'Continue' : 'Try Again')}
             </button>
           </div>
         </div>

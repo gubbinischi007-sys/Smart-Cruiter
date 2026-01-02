@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { applicantsApi, interviewsApi } from '../services/api';
+import { applicantsApi, interviewsApi, employeesApi } from '../services/api';
 import { format } from 'date-fns';
-import { ArrowLeft, Mail, Phone, Calendar, Briefcase, FileText, Video } from 'lucide-react';
-import { logAction } from '../utils/historyLogger';
+import { ArrowLeft, Mail, Phone, Calendar, Briefcase, FileText, Video, CheckCircle, Info, AlertTriangle, X, UserPlus } from 'lucide-react';
+import { logAction, logApplicationDecision } from '../utils/historyLogger';
 import './ApplicantDetail.css';
 
 const COMMON_COMPANY_RULES = `1. Code of Conduct: All employees are expected to maintain the highest standards of professional conduct and ethics.
@@ -43,6 +43,12 @@ interface Interview {
   status: string;
 }
 
+interface Notification {
+  id: string;
+  type: 'success' | 'error' | 'info';
+  message: string;
+}
+
 export default function ApplicantDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -63,6 +69,15 @@ export default function ApplicantDetail() {
     notes: '',
     rules: COMMON_COMPANY_RULES,
   });
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  const addNotification = (type: 'success' | 'error' | 'info', message: string) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setNotifications(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
 
   useEffect(() => {
     if (id) {
@@ -94,11 +109,11 @@ export default function ApplicantDetail() {
       await applicantsApi.sendOffer(id, offerForm);
       setShowOfferForm(false);
       logAction(`Sent offer to ${applicant?.first_name} ${applicant?.last_name}`);
-      alert('Offer letter sent successfully!');
+      addNotification('success', 'Offer letter sent successfully!');
       loadData();
     } catch (error) {
       console.error('Failed to send offer:', error);
-      alert('Failed to send offer');
+      addNotification('error', 'Failed to send offer');
     }
   };
 
@@ -111,7 +126,7 @@ export default function ApplicantDetail() {
       loadData();
     } catch (error) {
       console.error('Failed to update applicant stage:', error);
-      alert('Failed to update applicant stage');
+      addNotification('error', 'Failed to update applicant stage');
     }
   };
 
@@ -135,7 +150,48 @@ export default function ApplicantDetail() {
       loadData();
     } catch (error) {
       console.error('Failed to create interview:', error);
-      alert('Failed to create interview');
+      addNotification('error', 'Failed to create interview');
+    }
+  };
+
+  const handleOnboard = async () => {
+    if (!applicant) return;
+    try {
+      const cleanName = (n: string) => {
+        if (!n) return '';
+        let name = n.trim().toLowerCase();
+        // Remove redundant leading character if it's a double-start (like pprabs)
+        if (name.match(/^([a-z])\1/)) name = name.substring(1);
+        return name.charAt(0).toUpperCase() + name.slice(1);
+      };
+
+      await employeesApi.create({
+        applicant_id: applicant.id,
+        name: `${cleanName(applicant.first_name)} ${cleanName(applicant.last_name)}`,
+        email: applicant.email,
+        job_title: applicant.job_title,
+        department: 'Engineering', // Default or could be dynamic
+        hired_date: applicant.offer_joining_date || new Date().toISOString(),
+        status: 'active'
+      });
+      addNotification('success', 'Candidate successfully onboarded as employee!');
+      logAction(`Onboarded ${applicant.first_name} ${applicant.last_name} as employee`);
+      await logApplicationDecision({
+        name: `${applicant.first_name} ${applicant.last_name}`,
+        email: applicant.email,
+        job_title: applicant.job_title || 'Candidate',
+        status: 'Accepted',
+        reason: 'Candidate onboarded as employee.'
+      });
+
+      // Remove from applicants table as they are now an employee
+      await applicantsApi.delete(applicant.id);
+
+      // Could navigate to employees page
+      setTimeout(() => navigate('/admin/employees'), 2000);
+    } catch (error: any) {
+      console.error('Failed to onboard employee:', error);
+      addNotification('error', error.response?.data?.error || 'Failed to onboard employee');
     }
   };
 
@@ -157,8 +213,16 @@ export default function ApplicantDetail() {
         >
           <ArrowLeft size={16} /> Back to Applicants
         </button>
-        <h1 className="applicant-name" style={{ textTransform: 'capitalize' }}>
-          {applicant.first_name} {applicant.last_name}
+        <h1 className="applicant-name">
+          {(() => {
+            const cleanName = (n: string) => {
+              if (!n) return '';
+              let name = n.trim().toLowerCase();
+              if (name.match(/^([a-z])\1/)) name = name.substring(1);
+              return name.charAt(0).toUpperCase() + name.slice(1);
+            };
+            return `${cleanName(applicant.first_name)} ${cleanName(applicant.last_name)}`;
+          })()}
         </h1>
         <p className="text-muted">Applicant Details & Interview Management</p>
       </div>
@@ -223,7 +287,13 @@ export default function ApplicantDetail() {
                       doc.setFontSize(24);
                       doc.setTextColor(33, 33, 33);
                       doc.setFont('helvetica', 'bold');
-                      doc.text(`${applicant.first_name} ${applicant.last_name}`, 20, 20);
+                      const cleanName = (n: string) => {
+                        if (!n) return '';
+                        let name = n.trim().toLowerCase();
+                        if (name.match(/^([a-z])\1/)) name = name.substring(1);
+                        return name.charAt(0).toUpperCase() + name.slice(1);
+                      };
+                      doc.text(`${cleanName(applicant.first_name)} ${cleanName(applicant.last_name)}`, 20, 20);
 
                       // Contact Info
                       doc.setFontSize(10);
@@ -324,7 +394,7 @@ export default function ApplicantDetail() {
 
                     } catch (error) {
                       console.error("Failed to generate resume:", error);
-                      alert("Could not generate resume preview.");
+                      addNotification('error', "Could not generate resume preview.");
                     }
                   } else if (applicant.resume_url) {
                     window.open(applicant.resume_url, '_blank');
@@ -357,15 +427,36 @@ export default function ApplicantDetail() {
             </div>
           )}
 
-          <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem' }}>
+          <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
             <button
               className="btn btn-primary"
               onClick={() => setShowOfferForm(true)}
               disabled={applicant.stage === 'hired' || applicant.offer_status === 'accepted'}
-              style={{ flex: 1 }}
+              style={{ width: '100%' }}
             >
               {applicant.offer_sent_at ? 'Resend Offer' : 'Send Offer Letter'}
             </button>
+
+            {(applicant.stage === 'hired' || applicant.offer_status === 'accepted') && (
+              <button
+                className="btn btn-success"
+                onClick={handleOnboard}
+                style={{
+                  width: '100%',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: 'white',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  padding: '0.75rem',
+                  fontWeight: 'bold'
+                }}
+              >
+                <UserPlus size={18} /> Onboard as Employee
+              </button>
+            )}
           </div>
 
 
@@ -586,6 +677,26 @@ export default function ApplicantDetail() {
           </div>
         </div>
       )}
+
+      {/* Toast Notifications */}
+      <div className="toast-container">
+        {notifications.map((notification) => (
+          <div key={notification.id} className={`toast toast-${notification.type}`}>
+            <div className="toast-icon">
+              {notification.type === 'success' ? <CheckCircle size={20} /> :
+                notification.type === 'error' ? <AlertTriangle size={20} /> :
+                  <Info size={20} />}
+            </div>
+            <span>{notification.message}</span>
+            <button
+              onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 'auto', display: 'flex' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

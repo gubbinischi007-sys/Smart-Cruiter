@@ -43,6 +43,8 @@ export default function CandidateDashboard() {
 
     useEffect(() => {
         loadApplications();
+        const interval = setInterval(loadApplications, 10000); // Poll every 10 seconds
+        return () => clearInterval(interval);
     }, [user.email]);
 
     const loadApplications = async () => {
@@ -76,7 +78,7 @@ export default function CandidateDashboard() {
     const stats = [
         { label: 'Applications', value: myApplications.length, icon: Briefcase, color: '#3b82f6' },
         { label: 'Interviews', value: myApplications.filter(a => a.stage === 'interview').length, icon: Clock, color: '#f59e0b' },
-        { label: 'Offers', value: myApplications.filter(a => a.stage === 'hired').length, icon: CheckCircle, color: '#10b981' },
+        { label: 'Offers', value: myApplications.filter(a => a.stage === 'hired' || (a.offerStatus && a.offerStatus !== 'rejected')).length, icon: CheckCircle, color: '#10b981' },
     ];
 
     if (loading) {
@@ -162,15 +164,6 @@ export default function CandidateDashboard() {
                                         </span>
                                     </div>
                                     <div className="flex gap-2">
-                                        {app.offerStatus === 'pending' && (
-                                            <Link
-                                                to={`/candidate/applications/${app.id}/status`}
-                                                className="btn btn-sm"
-                                                style={{ background: '#6366f1', color: 'white', fontWeight: 'bold' }}
-                                            >
-                                                VIEW OFFER 🎁
-                                            </Link>
-                                        )}
                                         <Link to={`/candidate/applications/${app.id}/status`} className="btn btn-sm btn-secondary">View Status</Link>
                                         <button
                                             onClick={() => handleWithdrawClick(app.id)}

@@ -7,6 +7,9 @@ import { applicantRoutes } from './routes/applicants.js';
 import { interviewRoutes } from './routes/interviews.js';
 import { emailRoutes } from './routes/emails.js';
 import { analyticsRoutes } from './routes/analytics.js';
+import { notificationRoutes } from './routes/notifications.js';
+import employeeRoutes from './routes/employees.js';
+import historyRoutes from './routes/history.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,14 +27,18 @@ initDatabase().then(() => {
   app.use('/api/interviews', interviewRoutes);
   app.use('/api/emails', emailRoutes);
   app.use('/api/analytics', analyticsRoutes);
+  app.use('/api/notifications', notificationRoutes);
+  app.use('/api/employees', employeeRoutes);
+  app.use('/api/history', historyRoutes);
 
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
   });
 
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`- Local: http://localhost:${PORT}`);
   });
 });
 

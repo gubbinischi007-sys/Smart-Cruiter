@@ -1,8 +1,8 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { jobsApi } from '../services/api';
-import { Plus, Briefcase, Edit2, Trash2, Eye, Search } from 'lucide-react';
+import { Plus, Briefcase, Edit2, Trash2, Eye, Search, X } from 'lucide-react';
 import { logAction } from '../utils/historyLogger';
 import './Jobs.css';
 
@@ -22,10 +22,21 @@ export default function Jobs() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
 
   useEffect(() => {
     loadJobs();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [filter]);
 
   const loadJobs = async () => {
@@ -73,7 +84,7 @@ export default function Jobs() {
     <div className="animate-fade-in">
       <div className="flex items-center mb-8" style={{ width: '100%', display: 'flex', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="text-3xl font-bold mb-2">Jobs</h1>
+          <h1 className="text-3xl font-bold mb-2 text-gradient">Jobs</h1>
           <p className="text-muted">Manage your job positions and requirements.</p>
         </div>
         <Link to="/admin/jobs/new" className="btn btn-primary btn-sm" style={{ width: 'fit-content' }}>
@@ -95,15 +106,27 @@ export default function Jobs() {
           ))}
         </div>
 
-        <div className="search-container">
+        <div className="search-wrapper-jobs">
+          <Search className="search-icon-left" size={18} />
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search jobs..."
-            className="search-input"
+            className="search-input-premium"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-          <Search size={18} className="search-icon" />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="search-clear-btn"
+            >
+              <X size={14} />
+            </button>
+          )}
+          <div className="search-shortcut">
+            <kbd>⌘</kbd>K
+          </div>
         </div>
       </div>
 

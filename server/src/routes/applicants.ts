@@ -2,6 +2,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { run, get, all } from '../database.js';
 import { Applicant, CreateApplicantInput, UpdateApplicantInput, ApplicantStage } from '../models/applicant.js';
+import { sendEmail } from '../services/email.js';
 
 const router = express.Router();
 
@@ -241,7 +242,14 @@ router.patch('/:id/offer', async (req, res) => {
     const { salary, joining_date, notes, rules } = req.body;
     const now = new Date().toISOString();
 
-    const existing = await get<Applicant>('SELECT * FROM applicants WHERE id = ?', [req.params.id]);
+    const existing = await get<any>(`
+      SELECT a.*, j.title as job_title 
+      FROM applicants a 
+      LEFT JOIN jobs j ON a.job_id = j.id 
+      WHERE a.id = ?`,
+      [req.params.id]
+    );
+
     if (!existing) {
       return res.status(404).json({ error: 'Applicant not found' });
     }
@@ -258,6 +266,33 @@ router.patch('/:id/offer', async (req, res) => {
        WHERE id = ?`,
       [salary, joining_date, notes, rules, now, now, req.params.id]
     );
+
+    // Send Offer Email
+    try {
+      await sendEmail({
+        to: existing.email,
+        subject: `Job Offer from Smart-Cruiter`,
+        html: `
+          <h2>Congratulations ${existing.first_name}!</h2>
+          <p>We are thrilled to offer you the position of <strong>${existing.job_title}</strong> at Smart-Cruiter Inc.</p>
+          
+          <h3>Offer Details:</h3>
+          <ul>
+            <li><strong>Annual Salary:</strong> ${salary}</li>
+            <li><strong>Joining Date:</strong> ${joining_date}</li>
+          </ul>
+          
+          ${notes ? `<h3>Benefits & Notes:</h3><p>${notes}</p>` : ''}
+          
+          <p>Please log in to your candidate dashboard to view the full offer letter and accept/reject it.</p>
+          <a href="${process.env.VITE_CLIENT_URL || 'http://localhost:3000'}/candidate/applications/${existing.id}/status" style="display:inline-block;padding:10px 20px;background:#6366f1;color:white;text-decoration:none;border-radius:5px;margin-top:10px;">View Offer Details</a>
+          
+          <p>Best regards,<br>The Smart-Cruiter Team</p>
+        `
+      });
+    } catch (emailError) {
+      console.error("Failed to send offer email:", emailError);
+    }
 
     const updated = await get<Applicant>('SELECT * FROM applicants WHERE id = ?', [req.params.id]);
     res.json({ message: 'Offer sent successfully', applicant: updated });

@@ -1,15 +1,18 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Briefcase, User, LogOut, Hexagon } from 'lucide-react';
+import { Briefcase, User, LogOut, Hexagon, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../contexts/NotificationContext';
 import './Layout.css'; // Reusing the same CSS but you could make a separate one
 
 export default function CandidateLayout() {
     const location = useLocation();
     const { user, logout } = useAuth();
+    const { unreadCount } = useNotification();
 
     const navLinks = [
         { path: '/candidate/jobs', label: 'Browse Jobs', icon: Briefcase },
         { path: '/candidate/dashboard', label: 'My Applications', icon: User },
+        { path: '/candidate/emails', label: 'Inbox', icon: Mail, badge: unreadCount },
     ];
 
     return (
@@ -24,7 +27,7 @@ export default function CandidateLayout() {
                             </span>
                         </Link>
                         <div className="nav-links">
-                            {navLinks.map((link) => {
+                            {navLinks.map((link: any) => {
                                 const isActive = location.pathname.startsWith(link.path);
 
                                 return (
@@ -32,10 +35,32 @@ export default function CandidateLayout() {
                                         key={link.path}
                                         to={link.path}
                                         className={`nav-item ${isActive ? 'active' : ''}`}
-                                        style={isActive ? { background: '#22c55e', boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)' } : {}}
+                                        style={isActive ? { background: '#22c55e', boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)', position: 'relative' } : { position: 'relative' }}
                                     >
                                         <link.icon size={16} />
                                         {link.label}
+                                        {link.badge > 0 && (
+                                            <span style={{
+                                                position: 'absolute',
+                                                top: '-6px',
+                                                right: '-6px',
+                                                background: '#ef4444',
+                                                color: 'white',
+                                                fontSize: '10px',
+                                                fontWeight: 'bold',
+                                                minWidth: '18px',
+                                                height: '18px',
+                                                borderRadius: '50%',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                padding: '0 4px',
+                                                border: '2px solid #0f1115',
+                                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                                            }}>
+                                                {link.badge}
+                                            </span>
+                                        )}
                                     </Link>
                                 );
                             })}

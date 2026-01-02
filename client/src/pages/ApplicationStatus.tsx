@@ -42,19 +42,7 @@ export default function ApplicationStatus() {
         }
     };
 
-    const handleOfferResponse = async (response: 'accepted' | 'rejected') => {
-        if (!id) return;
-        if (!confirm(`Are you sure you want to ${response} this offer?`)) return;
 
-        try {
-            await applicantsApi.respondToOffer(id, response);
-            alert(`Offer ${response} successfully!`);
-            loadApplication();
-        } catch (error) {
-            console.error('Failed to respond to offer:', error);
-            alert('Failed to process offer response');
-        }
-    };
 
     if (loading) return <div className="loading-container">Loading status...</div>;
 
@@ -113,59 +101,23 @@ export default function ApplicationStatus() {
                     )}
 
                     {application.offer_status === 'pending' && (
-                        <div className="offer-letter-container animate-fade-in" style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '1rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                                <div style={{ background: '#6366f1', color: 'white', padding: '0.75rem', borderRadius: '0.75rem' }}>
-                                    <PartyPopper size={24} />
-                                </div>
-                                <h2 style={{ margin: 0 }}>Job Offer Received!</h2>
+                        <div className="offer-letter-container animate-fade-in" style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '1rem', textAlign: 'center' }}>
+                            <div style={{ display: 'inline-block', background: '#6366f1', color: 'white', padding: '1rem', borderRadius: '50%', marginBottom: '1rem' }}>
+                                <PartyPopper size={32} />
                             </div>
-
-                            <div className="offer-details" style={{ marginBottom: '2rem', padding: '1.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.75rem' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                                    <div>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Proposed Salary (Annual)</p>
-                                        <p style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{application.offer_salary}</p>
-                                    </div>
-                                    <div>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Expected Joining Date</p>
-                                        <p style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{application.offer_joining_date}</p>
-                                    </div>
-                                </div>
-                                {application.offer_notes && (
-                                    <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Additional Benefits & Notes</p>
-                                        <div style={{ fontSize: '0.95rem', lineHeight: '1.6', color: 'rgba(255,255,255,0.8)' }}>
-                                            {application.offer_notes}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {application.offer_rules && (
-                                    <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Company Rules & Regulations</p>
-                                        <div style={{ fontSize: '0.95rem', lineHeight: '1.6', whiteSpace: 'pre-wrap', color: 'rgba(255,255,255,0.8)' }}>
-                                            {application.offer_rules}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button
+                            <h2 style={{ marginBottom: '0.5rem' }}>Job Offer Received!</h2>
+                            <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
+                                Congratulations! You have received a job offer for this position.
+                            </p>
+                            <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem', display: 'inline-block' }}>
+                                <p style={{ margin: 0 }}>Please check your <strong>Inbox</strong> to view the full offer details and take action.</p>
+                                <Link
+                                    to="/candidate/emails"
                                     className="btn btn-primary"
-                                    style={{ flex: 1, height: '48px' }}
-                                    onClick={() => handleOfferResponse('accepted')}
+                                    style={{ marginTop: '1rem', display: 'inline-block' }}
                                 >
-                                    Accept Offer
-                                </button>
-                                <button
-                                    className="btn btn-danger-outline"
-                                    style={{ flex: 1, height: '48px', borderColor: '#ef4444', color: '#ef4444' }}
-                                    onClick={() => handleOfferResponse('rejected')}
-                                >
-                                    Decline Offer
-                                </button>
+                                    Go to Inbox
+                                </Link>
                             </div>
                         </div>
                     )}

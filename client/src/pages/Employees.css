@@ -1,0 +1,154 @@
+.employees-page {
+    animation: fadeIn 0.5s ease-out;
+}
+
+.table th {
+    text-align: left;
+    padding: 1rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.status-active {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.status-inactive {
+    background: rgba(148, 163, 184, 0.1);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.employee-row:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Premium Search Bar Styles */
+.search-container-premium {
+    width: 100%;
+    margin-top: 1rem;
+}
+
+.search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: rgba(30, 41, 59, 0.4);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1.25rem;
+    padding: 0.25rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search-wrapper:focus-within {
+    border-color: rgba(99, 102, 241, 0.5);
+    background: rgba(30, 41, 59, 0.6);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1), 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+.search-icon-left {
+    position: absolute;
+    left: 1.25rem;
+    color: #64748b;
+    pointer-events: none;
+    transition: color 0.2s;
+}
+
+.search-wrapper:focus-within .search-icon-left {
+    color: #818cf8;
+}
+
+.search-input-premium {
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 0.875rem 3.5rem 0.875rem 3.25rem;
+    color: white;
+    font-size: 0.9375rem;
+    letter-spacing: 0.015em;
+    outline: none;
+}
+
+.search-input-premium::placeholder {
+    color: #475569;
+}
+
+.search-clear-btn {
+    position: absolute;
+    right: 3.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    color: #94a3b8;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.search-clear-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.search-shortcut {
+    position: absolute;
+    right: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    color: #475569;
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+.search-shortcut kbd {
+    font-family: system-ui;
+    font-size: 0.875rem;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-muted);
+}

@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Users2, Hexagon, LogOut, History } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Users2, Hexagon, LogOut, History, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import './Layout.css';
 
@@ -11,6 +11,7 @@ export default function Layout() {
     { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/admin/jobs', label: 'Jobs', icon: Briefcase },
     { path: '/admin/applicants', label: 'Applicants', icon: Users2 },
+    { path: '/admin/employees', label: 'Employees', icon: UserCheck },
     { path: '/admin/history', label: 'History', icon: History },
   ];
 

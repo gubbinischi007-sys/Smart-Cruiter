@@ -16,8 +16,9 @@ import CandidateJobs from './pages/CandidateJobs';
 import ApplicationStatus from './pages/ApplicationStatus';
 import ProtectedRoute from './components/ProtectedRoute';
 import Interviews from './pages/Interviews';
-
 import History from './pages/History';
+import CandidateEmails from './pages/CandidateEmails';
+import Employees from './pages/Employees';
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
       }>
         <Route path="dashboard" element={<CandidateDashboard />} />
         <Route path="jobs" element={<CandidateJobs />} />
+        <Route path="emails" element={<CandidateEmails />} />
         <Route path="applications/:id/status" element={<ApplicationStatus />} />
         <Route index element={<Navigate to="dashboard" replace />} />
       </Route>
@@ -56,6 +58,7 @@ function App() {
         <Route path="history" element={<History />} />
 
         <Route path="applicants/:id" element={<ApplicantDetail />} />
+        <Route path="employees" element={<Employees />} />
         <Route path="interviews" element={<Interviews />} />
       </Route>
 

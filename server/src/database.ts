@@ -129,11 +129,54 @@ export async function initDatabase(): Promise<void> {
     )
   `);
 
+  // Create Employees table
+  await run(`
+    CREATE TABLE IF NOT EXISTS employees (
+      id TEXT PRIMARY KEY,
+      applicant_id TEXT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      job_title TEXT,
+      department TEXT,
+      hired_date DATETIME,
+      status TEXT DEFAULT 'active',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (applicant_id) REFERENCES applicants(id) ON DELETE SET NULL
+    )
+  `);
+
+  // Create Notifications table
+  await run(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      recipient_email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT DEFAULT 'info',
+      is_read INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Create Application History table
+  await run(`
+    CREATE TABLE IF NOT EXISTS application_history (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      job_title TEXT,
+      status TEXT NOT NULL, -- 'Accepted', 'Rejected'
+      reason TEXT,
+      date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Create indexes
   await run(`CREATE INDEX IF NOT EXISTS idx_applicants_job_id ON applicants(job_id)`);
   await run(`CREATE INDEX IF NOT EXISTS idx_applicants_stage ON applicants(stage)`);
   await run(`CREATE INDEX IF NOT EXISTS idx_interviews_applicant_id ON interviews(applicant_id)`);
   await run(`CREATE INDEX IF NOT EXISTS idx_interviews_job_id ON interviews(job_id)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_history_email ON application_history(email)`);
 
   console.log('Database tables created/verified');
 }

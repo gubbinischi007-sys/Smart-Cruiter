@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { applicantsApi, jobsApi, emailApi } from '../services/api';
-import { XCircle, CheckCircle, User, Briefcase, Copy, GitMerge } from 'lucide-react';
+import { applicantsApi, jobsApi, emailApi, historyApi } from '../services/api';
+import { logAction } from '../utils/historyLogger';
+import { XCircle, CheckCircle, User, Briefcase, Copy, GitMerge, Info, AlertTriangle, X, ShieldAlert, Mail } from 'lucide-react';
 import './Applicants.css';
 
 interface Applicant {
@@ -16,11 +17,18 @@ interface Applicant {
   resume_url?: string;
 }
 
+interface Notification {
+  id: string;
+  type: 'success' | 'error' | 'info';
+  message: string;
+}
+
 export default function Applicants() {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApplicants, setSelectedApplicants] = useState<Set<string>>(new Set());
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filters, setFilters] = useState({
     job_id: '',
     stage: '',
@@ -36,6 +44,14 @@ export default function Applicants() {
     type: null,
     reason: ''
   });
+
+  const addNotification = (type: 'success' | 'error' | 'info', message: string) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setNotifications(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
 
   useEffect(() => {
     loadJobs();
@@ -76,7 +92,7 @@ export default function Applicants() {
       loadApplicants();
     } catch (error) {
       console.error('Failed to update applicant stage:', error);
-      alert('Failed to update applicant stage');
+      addNotification('error', 'Failed to update applicant stage');
     }
   };
 
@@ -121,7 +137,7 @@ export default function Applicants() {
 
   const handleBulkMerge = () => {
     if (selectedApplicants.size < 2) {
-      alert("Please select at least 2 candidates to merge.");
+      addNotification('error', "Please select at least 2 candidates to merge.");
       return;
     }
     setConfirmationModal({
@@ -129,6 +145,27 @@ export default function Applicants() {
       type: 'merge',
       reason: 'Consolidating duplicate applicant profiles.'
     });
+  };
+
+  const handleBulkIdentityWarning = async () => {
+    if (selectedApplicants.size === 0) return;
+    try {
+      await emailApi.sendIdentityWarning(Array.from(selectedApplicants));
+      logAction(`Sent identity warnings to ${selectedApplicants.size} candidates`);
+      addNotification('success', `Sent identity warnings to ${selectedApplicants.size} candidates`);
+      setSelectedApplicants(new Set());
+    } catch (error) {
+      addNotification('error', 'Failed to send identity warnings');
+    }
+  };
+
+  const sendIdentityWarning = async (id: string, name: string) => {
+    try {
+      await emailApi.sendIdentityWarning([id]);
+      addNotification('success', `Identity warning sent to ${name}`);
+    } catch (error) {
+      addNotification('error', `Failed to send warning to ${name}`);
+    }
   };
 
   const confirmAction = async () => {
@@ -142,10 +179,19 @@ export default function Applicants() {
         // In a real scenario, user might choose the master.
         const duplicates = selectedIds.slice(1);
 
+        // Send warning email to duplicates
+        try {
+          await emailApi.sendDuplicateWarning(duplicates);
+        } catch (emailError) {
+          console.error("Failed to send duplicate warning email:", emailError);
+          // Continue with merge even if email fails
+        }
+
         // Simulate merging by deleting duplicates
         await Promise.all(duplicates.map(id => applicantsApi.delete(id)));
 
-        alert(`Merged ${duplicates.length} duplicate profile(s) into the master record.`);
+        logAction(`Merged ${duplicates.length} duplicate profiles into master record`);
+        addNotification('success', `Merged ${duplicates.length} duplicate profile(s) into the master record.Warning email sent.`);
         setSelectedApplicants(new Set());
         loadApplicants();
       } else {
@@ -153,7 +199,7 @@ export default function Applicants() {
         const applicantsToProcess = applicants.filter(app => selectedApplicants.has(app.id));
         const historyRecords = applicantsToProcess.map(app => ({
           id: app.id,
-          name: `${app.first_name} ${app.last_name}`,
+          name: `${app.first_name} ${app.last_name} `,
           email: app.email,
           job_title: app.job_title,
           status: type === 'accept' ? 'Accepted' : 'Rejected',
@@ -168,20 +214,30 @@ export default function Applicants() {
           await emailApi.sendBulkRejection(Array.from(selectedApplicants));
         }
 
-        // Save History
+        // Save History to Database
+        await Promise.all(historyRecords.map(record => historyApi.create({
+          name: record.name,
+          email: record.email,
+          job_title: record.job_title || 'Unknown',
+          status: record.status as 'Accepted' | 'Rejected',
+          reason: record.reason
+        })));
+
+        // Legacy: Save History to localStorage
         const existingHistory = JSON.parse(localStorage.getItem('applicationHistory') || '[]');
         localStorage.setItem('applicationHistory', JSON.stringify([...existingHistory, ...historyRecords]));
 
         // Delete Applicants
         await Promise.all(Array.from(selectedApplicants).map(id => applicantsApi.delete(id)));
 
-        alert(`${type === 'accept' ? 'Acceptance' : 'Rejection'} processed and applicants removed.`);
+        logAction(`Bulk ${type === 'accept' ? 'Accepted' : 'Rejected'} ${selectedApplicants.size} applicants`);
+        addNotification('success', `${type === 'accept' ? 'Acceptance' : 'Rejection'} processed and applicants removed.`);
         setSelectedApplicants(new Set());
         loadApplicants();
       }
     } catch (error) {
-      console.error(`Failed to process action ${type}:`, error);
-      alert(`Failed to process action ${type}`);
+      console.error(`Failed to process action ${type}: `, error);
+      addNotification('error', `Failed to process action ${type} `);
     } finally {
       setConfirmationModal({ isOpen: false, type: null, reason: '' });
     }
@@ -194,7 +250,6 @@ export default function Applicants() {
       </div>
     );
   }
-
   return (
     <div className="animate-fade-in relative">
       {/* Standard Enterprise Confirmation Modal */}
@@ -216,7 +271,7 @@ export default function Applicants() {
 
               <span className="modal-subtitle">
                 {confirmationModal.type === 'merge'
-                  ? `Are you sure you want to merge ${selectedApplicants.size} profiles? This will keep one record and delete the rest.`
+                  ? `Are you sure you want to merge ${selectedApplicants.size} profiles ? This will keep one record and delete the rest.`
                   : `Are you sure you want to ${confirmationModal.type === 'accept' ? 'accept' : 'reject'} ${selectedApplicants.size} applicant${selectedApplicants.size > 1 ? 's' : ''}?`
                 }
               </span>
@@ -251,14 +306,14 @@ export default function Applicants() {
         </div>
       )}
 
+
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Applicants</h1>
+          <h1 className="text-3xl font-bold mb-2 text-gradient">Applicants</h1>
           <p className="text-muted">Manage and track candidate progress.</p>
         </div>
       </div>
 
-      {/* Filters */}
       <div className="card mb-6 p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="form-group mb-0">
@@ -324,6 +379,9 @@ export default function Applicants() {
               <button onClick={handleBulkRejection} className="btn btn-sm btn-danger flex items-center gap-2">
                 <XCircle size={14} /> Send Rejection
               </button>
+              <button onClick={handleBulkIdentityWarning} className="btn btn-sm btn-secondary flex items-center gap-2" style={{ border: '1px solid #ef4444', color: '#ef4444' }}>
+                <ShieldAlert size={14} /> Send Identity Warning
+              </button>
             </div>
           </div>
         )}
@@ -353,7 +411,7 @@ export default function Applicants() {
           <tbody>
             {applicants.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-muted">
+                <td colSpan={8} className="text-center py-12 text-muted">
                   <div className="flex flex-col items-center">
                     <User size={48} className="mb-4 opacity-20" />
                     <p>No applicants found matching your filters.</p>
@@ -374,8 +432,16 @@ export default function Applicants() {
                   <td>
                     <Link to={`/admin/applicants/${applicant.id}`} className="flex items-center gap-3 group">
                       <div>
-                        <div className="font-medium text-white group-hover:text-primary transition-colors" style={{ textTransform: 'capitalize', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          {applicant.first_name} {applicant.last_name}
+                        <div className="font-medium text-white group-hover:text-primary transition-colors" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {(() => {
+                            const cleanName = (n: string) => {
+                              if (!n) return '';
+                              let name = n.trim().toLowerCase();
+                              if (name.match(/^([a-z])\1/)) name = name.substring(1);
+                              return name.charAt(0).toUpperCase() + name.slice(1);
+                            };
+                            return `${cleanName(applicant.first_name)} ${cleanName(applicant.last_name)} `;
+                          })()}
                           {applicants.filter(a => a.email === applicant.email).length > 1 && (
                             <span
                               title="Duplicate Candidate Detected"
@@ -424,16 +490,155 @@ export default function Applicants() {
                   <td className="text-sm text-muted">{new Date(applicant.applied_at).toLocaleDateString()}</td>
                   <td>
                     {(() => {
-                      // Simulated AI Score
-                      // score = (unique_char_code_sum % 30) + 70  -> Range 70-99
-                      // If no resume, score is 0
-                      const score = applicant.resume_url ? 70 + (applicant.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 30) : 0;
+                      const resumeUrlLower = (applicant.resume_url || '').toLowerCase();
 
-                      let color = '#ef4444'; // red
-                      if (score === 0) color = '#94a3b8'; // slate/gray for no resume
-                      else if (score >= 90) color = '#10b981'; // green
-                      else if (score >= 80) color = '#8b5cf6'; // violet
-                      else if (score >= 70) color = '#f59e0b'; // orange
+                      // 1. Basic Presence Check
+                      if (!applicant.resume_url) {
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#94a3b8' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold' }}>0</div>
+                            <span style={{ fontSize: '0.75rem' }}>No Resume</span>
+                          </div>
+                        );
+                      }
+
+                      // 2. Local Ownership Hint (Does THIS user's name match?)
+                      const nameParts = [
+                        applicant.first_name.toLowerCase(),
+                        applicant.last_name.toLowerCase(),
+                        applicant.email.split('@')[0].toLowerCase()
+                      ];
+                      const isLocalOwner = nameParts.some(part => part.length >= 3 && resumeUrlLower.includes(part));
+
+                      // 3. Conflict Analysis
+                      const othersUsingSameResume = applicants.filter(a =>
+                        a.id !== applicant.id &&
+                        a.resume_url === applicant.resume_url
+                      );
+
+                      const existsBetterOwner = othersUsingSameResume.some(other => {
+                        const otherParts = [
+                          other.first_name.toLowerCase(),
+                          other.last_name.toLowerCase(),
+                          other.email.split('@')[0].toLowerCase()
+                        ];
+                        return otherParts.some(p => p.length >= 3 && resumeUrlLower.includes(p));
+                      });
+
+                      // 4. Reporting Hierarchy
+
+                      // CASE A: Someone else is the owner, this user is likely incorrect (Mismatch)
+                      if (existsBetterOwner && !isLocalOwner) {
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.1)' }}>!</div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Conflict</span>
+                              <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>Identity Mismatch</span>
+                            </div>
+                            <button
+                              onClick={() => sendIdentityWarning(applicant.id, applicant.first_name)}
+                              title="Send Identity Warning"
+                              style={{
+                                marginLeft: 'auto',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid #ef4444',
+                                color: '#ef4444',
+                                padding: '4px',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Mail size={12} />
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      // CASE B: Multiple people using the same resume, but this user IS the owner
+                      // We show the score but with a "Verified Owner" status
+
+                      // CASE C: General Conflict (Duplicate file, no clear owner via name matching)
+                      if (othersUsingSameResume.length > 0 && !isLocalOwner && !existsBetterOwner) {
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold' }}>!</div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Duplicate</span>
+                              <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>File Conflict Det.</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // CASE D: Ownership status check - Name mismatch (Red Error)
+                      if (!isLocalOwner) {
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.1)' }}>!</div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Conflict</span>
+                              <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>Identity Mismatch</span>
+                            </div>
+                            <button
+                              onClick={() => sendIdentityWarning(applicant.id, applicant.first_name)}
+                              title="Send Identity Warning"
+                              style={{
+                                marginLeft: 'auto',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid #ef4444',
+                                color: '#ef4444',
+                                padding: '4px',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Mail size={12} />
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      // Final Score Calculation for Verified or Owner cases
+                      let score = 40; // Base score for having a valid resume
+
+                      // 1. Identity Bonus (Verified Owner)
+                      if (isLocalOwner) score += 20;
+
+                      // 2. Job Title Match (Search keywords from job title in URL)
+                      const jobKeywords = (applicant.job_title || '').toLowerCase().split(' ').filter(k => k.length > 2 && k !== 'coordinator' && k !== 'specialist');
+                      const matchedJobKeywords = jobKeywords.filter(k => resumeUrlLower.includes(k));
+                      score += (matchedJobKeywords.length * 10);
+
+                      // CASE E: Job Role Mismatch (Yellow Warning if identity is verified but job relevance is zero)
+                      if (matchedJobKeywords.length === 0 && isLocalOwner) {
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(245, 158, 11, 0.1)' }}>?</div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Review Needed</span>
+                              <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>Job Mismatch Det.</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // 3. Professional Skill Keywords Bonus
+                      const skills = ['senior', 'lead', 'expert', 'specialist', 'manager', 'engineer', 'developer', 'analyst', 'coordinator', 'professional', 'experienced'];
+                      const matchedSkills = skills.filter(s => resumeUrlLower.includes(s));
+                      score += (matchedSkills.length * 5);
+
+                      // 4. Random variation for realism (within 5 percentage points)
+                      const seed = applicant.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                      score += (seed % 6);
+
+                      // Cap score at 98% (rarely 100% automated match)
+                      score = Math.min(score, 98);
+
+                      let color = '#ef4444';
+                      if (score >= 90) color = '#10b981';
+                      else if (score >= 80) color = '#8b5cf6';
+                      else if (score >= 70) color = '#f59e0b';
 
                       return (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -452,7 +657,12 @@ export default function Applicants() {
                           }}>
                             {score}
                           </div>
-                          <span style={{ fontSize: '0.75rem', color: color }}>Match</span>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.75rem', color: color, fontWeight: 'bold' }}>{score}% Match</span>
+                            <span style={{ fontSize: '0.6rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                              <CheckCircle size={8} /> Verified
+                            </span>
+                          </div>
                         </div>
                       );
                     })()}
@@ -467,6 +677,26 @@ export default function Applicants() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Toast Notifications */}
+      <div className="toast-container">
+        {notifications.map((notification) => (
+          <div key={notification.id} className={`toast toast-${notification.type}`}>
+            <div className="toast-icon">
+              {notification.type === 'success' ? <CheckCircle size={20} /> :
+                notification.type === 'error' ? <AlertTriangle size={20} /> :
+                  <Info size={20} />}
+            </div>
+            <span>{notification.message}</span>
+            <button
+              onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 'auto', display: 'flex' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );

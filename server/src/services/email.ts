@@ -20,9 +20,25 @@ export interface EmailOptions {
   html: string;
 }
 
+import { v4 as uuidv4 } from 'uuid';
+import { run } from '../database.js';
+
 export async function sendEmail(options: EmailOptions): Promise<void> {
+  // Always log the "email" to the database as a notification for the candidate
+  try {
+    const id = uuidv4();
+    await run(
+      `INSERT INTO notifications (id, recipient_email, subject, message, type, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, options.to, options.subject, options.html, 'email', new Date().toISOString()]
+    );
+    console.log(`Notification saved for ${options.to}`);
+  } catch (dbError) {
+    console.error('Failed to save notification:', dbError);
+  }
+
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('Email not configured. Skipping email send.');
+    console.warn('Configuration: Email credentials missing. Email simulated.');
     console.log('Would send email:', options);
     return;
   }

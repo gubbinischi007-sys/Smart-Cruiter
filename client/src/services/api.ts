@@ -51,6 +51,10 @@ export const emailApi = {
     api.post('/emails/bulk-acceptance', { applicant_ids }),
   sendBulkRejection: (applicant_ids: string[]) =>
     api.post('/emails/bulk-rejection', { applicant_ids }),
+  sendDuplicateWarning: (applicant_ids: string[]) =>
+    api.post('/emails/duplicate-warning', { applicant_ids }),
+  sendIdentityWarning: (applicant_ids: string[]) =>
+    api.post('/emails/identity-warning', { applicant_ids }),
 };
 
 // Analytics API
@@ -60,6 +64,36 @@ export const analyticsApi = {
   getApplicantsOverTime: (days?: number) =>
     api.get('/analytics/applicants-over-time', { params: { days } }),
   getJobStats: (jobId: string) => api.get(`/analytics/job-stats/${jobId}`),
+};
+
+// Notifications API
+export const notificationsApi = {
+  getAll: (email: string) => api.get('/notifications', { params: { email } }),
+  getUnreadCount: (email: string) => api.get('/notifications/unread-count', { params: { email } }),
+  markAsRead: (id: string) => api.patch(`/notifications/${id}/read`),
+  delete: (id: string) => api.delete(`/notifications/${id}`),
+  deleteBulk: (ids: string[]) => api.delete('/notifications', { data: { ids } }),
+};
+
+// Employees API
+export const employeesApi = {
+  getAll: () => api.get('/employees'),
+  create: (data: any) => api.post('/employees', data),
+  update: (id: string, data: any) => api.patch(`/employees/${id}`, data),
+  delete: (id: string) => api.delete(`/employees/${id}`),
+};
+
+// History API
+export const historyApi = {
+  getAll: () => api.get('/history'),
+  create: (data: {
+    name: string;
+    email: string;
+    job_title: string;
+    status: 'Accepted' | 'Rejected';
+    reason: string;
+  }) => api.post('/history', data),
+  clearAll: () => api.delete('/history'),
 };
 
 export default api;

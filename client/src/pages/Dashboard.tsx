@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { analyticsApi, applicantsApi, interviewsApi } from '../services/api';
+import { analyticsApi, applicantsApi, interviewsApi, historyApi, employeesApi } from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Briefcase, Users, UserCheck, Calendar, TrendingUp, Plus, ArrowRight, Brain, CheckCircle, Copy, History, AlertTriangle, ShieldCheck, Download, FileText, FileSpreadsheet } from 'lucide-react';
+import { Briefcase, Users, UserCheck, Calendar, TrendingUp, Plus, ArrowRight, Brain, CheckCircle, Copy, History, AlertTriangle, ShieldCheck, Download, FileText, FileSpreadsheet, UserMinus, GitMerge } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import './Dashboard.css';
 
@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [recentApplications, setRecentApplications] = useState<any[]>([]);
   const [upcomingInterviews, setUpcomingInterviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reportType, setReportType] = useState<'applicants' | 'employees' | 'decisions' | 'login_activity'>('applicants');
 
   useEffect(() => {
     loadDashboard();
@@ -60,60 +61,98 @@ export default function Dashboard() {
 
   const handleExportReport = async (format: 'csv' | 'pdf') => {
     try {
-      const response = await applicantsApi.getAll();
-      const applicants = response.data;
+      let data: any[] = [];
+      let headers: string[] = [];
+      let filename = "";
+      let title = "";
 
-      const headers = ['ID', 'First Name', 'Last Name', 'Email', 'Role', 'Status', 'Applied At'];
-      const rows = applicants.map((app: any) => [
-        app.id,
-        app.first_name,
-        app.last_name,
-        app.email,
-        app.job_title || 'N/A',
-        app.status,
-        new Date(app.applied_at).toLocaleDateString()
-      ]);
+      if (reportType === 'applicants') {
+        const response = await applicantsApi.getAll();
+        data = response.data;
+        headers = ['ID', 'First Name', 'Last Name', 'Email', 'Role', 'Status', 'Applied At'];
+        filename = "applicants_report";
+        title = "Applicants Report";
+      } else if (reportType === 'employees') {
+        const response = await employeesApi.getAll();
+        data = response.data;
+        headers = ['ID', 'Name', 'Email', 'Role', 'Department', 'Hired Date'];
+        filename = "employees_report";
+        title = "Employees Report";
+      } else if (reportType === 'decisions') {
+        const response = await historyApi.getAll();
+        data = response.data;
+        headers = ['ID', 'Name', 'Email', 'Role', 'Decision', 'Reason', 'Date'];
+        filename = "application_decisions_report";
+        title = "Application Decisions Report";
+      } else if (reportType === 'login_activity') {
+        const history = JSON.parse(localStorage.getItem('loginHistory') || '[]');
+        // Flatten activities for the report
+        data = history.flatMap((session: any) =>
+          (session.actions || []).map((action: any) => ({
+            user: session.userEmail || 'Admin',
+            action: action.description,
+            timestamp: action.timestamp,
+            loginTime: session.loginTime
+          }))
+        ).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        headers = ['User Email', 'Action', 'Timestamp', 'Session Login Time'];
+        filename = "login_activity_report";
+        title = "Login Activity Report";
+      }
+
+      if (data.length === 0) {
+        alert("No data available to export for this selection.");
+        return;
+      }
+
+      const rows = data.map((item: any) => {
+        if (reportType === 'applicants') {
+          return [item.id, item.first_name, item.last_name, item.email, item.job_title || 'N/A', item.status, new Date(item.applied_at).toLocaleDateString()];
+        } else if (reportType === 'employees') {
+          return [item.id, item.name, item.email, item.job_title, item.department, new Date(item.hired_date).toLocaleDateString()];
+        } else if (reportType === 'decisions') {
+          return [item.id, item.name, item.email, item.job_title, item.status, item.reason, new Date(item.date).toLocaleDateString()];
+        } else if (reportType === 'login_activity') {
+          return [item.user, item.action, new Date(item.timestamp).toLocaleString(), new Date(item.loginTime).toLocaleString()];
+        }
+        return [];
+      });
 
       if (format === 'csv') {
         const csvContent = "data:text/csv;charset=utf-8,"
           + headers.join(",") + "\n"
-          + rows.map((e: any[]) => e.join(",")).join("\n");
+          + rows.map((e: any[]) => e.map(cell => `"${cell}"`).join(",")).join("\n");
 
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "applicants_report.csv");
+        link.setAttribute("download", `${filename}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       } else if (format === 'pdf') {
-        // Dynamic import to avoid SSR issues if any, and keep bundle size manageable
         const { jsPDF } = await import('jspdf');
         const autoTable = (await import('jspdf-autotable')).default;
 
-        const doc = new jsPDF();
+        const doc = new jsPDF('l', 'mm', 'a4'); // Landscape
 
         doc.setFontSize(18);
-        doc.text('Applicants Report', 14, 22);
+        doc.text(title, 14, 22);
 
         doc.setFontSize(11);
-        doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
 
         autoTable(doc, {
           startY: 36,
-          head: [['Name', 'Email', 'Role', 'Status', 'Applied']],
-          body: applicants.map((app: any) => [
-            `${app.first_name} ${app.last_name}`,
-            app.email,
-            app.job_title || 'N/A',
-            app.status,
-            new Date(app.applied_at).toLocaleDateString()
-          ]),
+          head: [headers],
+          body: rows,
+          theme: 'grid',
+          headStyles: { fillColor: [99, 102, 241], textColor: [255, 255, 255] }
         });
 
-        doc.save('applicants_report.pdf');
+        doc.save(`${filename}.pdf`);
       }
-
     } catch (error) {
       console.error('Failed to export report:', error);
       alert('Failed to generate report');
@@ -272,16 +311,28 @@ export default function Dashboard() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <FileText size={14} style={{ color: '#f43f5e' }} />
-                  <span className="text-sm">PDF & CSV Formats Available</span>
+                  <span className="text-sm">Select Report Type:</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <FileSpreadsheet size={14} style={{ color: '#10b981' }} />
-                  <span className="text-sm">Applicant Lists & Interview Reports</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <CheckCircle size={14} className="text-primary" />
-                  <span className="text-sm">Ready for Excel / Google Sheets</span>
-                </div>
+                <select
+                  value={reportType}
+                  onChange={(e: any) => setReportType(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    borderRadius: '8px',
+                    background: 'rgba(15, 23, 42, 0.4)',
+                    border: '1px solid rgba(236, 72, 153, 0.3)',
+                    color: 'white',
+                    fontSize: '0.85rem',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="applicants">Applicant Database</option>
+                  <option value="employees">Active Employees (Hired)</option>
+                  <option value="decisions">Application Decisions (History)</option>
+                  <option value="login_activity">Login Activity (Audit Trail)</option>
+                </select>
               </div>
 
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
@@ -430,33 +481,46 @@ export default function Dashboard() {
         <div className="card">
           <h2 className="actions-header">Recent Activity</h2>
           <div className="activity-feed-container" style={{ marginTop: 0, marginBottom: 0 }}>
-            <div className="activity-item">
-              <div className="activity-icon" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }}>
-                <Plus size={16} />
-              </div>
-              <div className="activity-content">
-                <h4>New Applicant</h4>
-                <div className="activity-time">2 hours ago • Sarah applied for Frontend Dev</div>
-              </div>
-            </div>
-            <div className="activity-item">
-              <div className="activity-icon" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' }}>
-                <Calendar size={16} />
-              </div>
-              <div className="activity-content">
-                <h4>Interview Scheduled</h4>
-                <div className="activity-time">5 hours ago • Mike for Product Designer</div>
-              </div>
-            </div>
-            <div className="activity-item">
-              <div className="activity-icon" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#6366f1' }}>
-                <Briefcase size={16} />
-              </div>
-              <div className="activity-content">
-                <h4>Job Created</h4>
-                <div className="activity-time">1 day ago • Senior Backend Engineer</div>
-              </div>
-            </div>
+            {(() => {
+              const history = JSON.parse(localStorage.getItem('loginHistory') || '[]');
+              const allActions = history.flatMap((session: any) =>
+                (session.actions || []).map((action: any) => ({
+                  description: action.description,
+                  timestamp: action.timestamp,
+                  user: session.email
+                }))
+              ).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                .slice(0, 5);
+
+              if (allActions.length === 0) {
+                return <div className="text-muted text-sm py-4">No recent activity recorded.</div>;
+              }
+
+              return allActions.map((action: any, i: number) => {
+                let Icon = Plus;
+                let color = '#6366f1';
+
+                if (action.description.toLowerCase().includes('reject')) { Icon = UserMinus; color = '#ef4444'; }
+                else if (action.description.toLowerCase().includes('accept')) { Icon = UserCheck; color = '#10b981'; }
+                else if (action.description.toLowerCase().includes('interview')) { Icon = Calendar; color = '#a855f7'; }
+                else if (action.description.toLowerCase().includes('merge')) { Icon = GitMerge; color = '#f59e0b'; }
+                else if (action.description.toLowerCase().includes('deactivate')) { Icon = UserMinus; color = '#ef4444'; }
+
+                return (
+                  <div key={i} className="activity-item">
+                    <div className="activity-icon" style={{ background: `${color}20`, color: color }}>
+                      <Icon size={16} />
+                    </div>
+                    <div className="activity-content">
+                      <h4>{action.description}</h4>
+                      <div className="activity-time">
+                        {formatDistanceToNow(new Date(action.timestamp), { addSuffix: true })} • {action.user}
+                      </div>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
       </div>

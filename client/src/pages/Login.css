@@ -364,42 +364,56 @@
 }
 
 .modal-content {
-    background: #1e2330;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 1rem;
-    padding: 2rem;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 16px;
+    padding: 32px;
     width: 90%;
-    max-width: 400px;
+    max-width: 450px;
     text-align: center;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    animation: scaleIn 0.2s ease-out;
 }
 
-@keyframes slideUp {
+@keyframes scaleIn {
     from {
         opacity: 0;
-        transform: translateY(20px);
+        transform: scale(0.95);
     }
 
     to {
         opacity: 1;
-        transform: translateY(0);
+        transform: scale(1);
     }
 }
 
 .modal-icon {
-    width: 3rem;
-    height: 3rem;
+    width: 3.5rem;
+    height: 3.5rem;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 1rem auto;
+    margin: 0 auto 1.25rem auto;
+    position: relative;
+}
+
+.modal-icon::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    opacity: 0.5;
+    z-index: -1;
 }
 
 .modal-icon.success {
-    background: rgba(34, 197, 94, 0.1);
-    color: #22c55e;
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.modal-icon.success::after {
+    background: rgba(16, 185, 129, 0.2);
 }
 
 .modal-icon.error {
@@ -407,48 +421,82 @@
     color: #ef4444;
 }
 
+.modal-icon.error::after {
+    background: rgba(239, 68, 68, 0.2);
+}
+
 .modal-title {
     font-size: 1.25rem;
     font-weight: 700;
     color: white;
-    margin-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    font-family: 'Outfit', sans-serif;
 }
 
 .modal-message {
-    color: #9ca3af;
+    color: #cbd5e1;
     font-size: 0.95rem;
-    margin-bottom: 1.5rem;
-    line-height: 1.5;
+    margin-bottom: 2rem;
+    line-height: 1.6;
 }
 
 .modal-btn {
     width: 100%;
-    padding: 0.75rem;
-    border-radius: 0.5rem;
-    font-weight: 600;
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 0.95rem;
     border: none;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     background: #374151;
     color: white;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    position: relative;
+    overflow: hidden;
 }
 
 .modal-btn:hover {
-    background: #4b5563;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.modal-btn:active {
+    transform: translateY(0);
 }
 
 .modal-btn.success {
-    background: #22c55e;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39);
 }
 
 .modal-btn.success:hover {
-    background: #16a34a;
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.23);
 }
 
 .modal-btn.error {
+    background: transparent;
+    border: 2px solid #ef4444;
+    color: #ef4444;
+    box-shadow: none;
+}
+
+/* Specific styling for the 'Sign In' button case which uses .error type but needs to look inviting? 
+   Actually, the user flow is 'Error -> Sign In', so making it red might feel like 'Stop'.
+   But the code sets type:'error' for duplicate account. 
+   Let's override the visual style for the button when it's an error but meant to be an action if possible, 
+   or just make the 'Error' button look distinct but clickable. 
+   Let's make the error button filled red for better visibility if it's the primary action.
+*/
+.modal-btn.error {
     background: #ef4444;
+    color: white;
+    border: none;
+    box-shadow: 0 4px 14px 0 rgba(239, 68, 68, 0.39);
 }
 
 .modal-btn.error:hover {
     background: #dc2626;
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.23);
 }
