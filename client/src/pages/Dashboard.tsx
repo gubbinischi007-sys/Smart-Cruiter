@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Briefcase, Users, UserCheck, Calendar, TrendingUp, Plus, ArrowRight, Brain, CheckCircle, Copy, History, AlertTriangle, ShieldCheck, Download, FileText, FileSpreadsheet, UserMinus, GitMerge } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import './Dashboard.css';
+import StatusModal from '../components/StatusModal';
 
 interface DashboardStats {
   totalJobs: number;
@@ -22,6 +23,18 @@ export default function Dashboard() {
   const [upcomingInterviews, setUpcomingInterviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [reportType, setReportType] = useState<'applicants' | 'employees' | 'decisions' | 'login_activity'>('applicants');
+
+  const [statusModal, setStatusModal] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'error';
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: '',
+  });
 
   useEffect(() => {
     loadDashboard();
@@ -102,17 +115,23 @@ export default function Dashboard() {
       }
 
       if (data.length === 0) {
-        alert("No data available to export for this selection.");
+        setStatusModal({
+          isOpen: true,
+          type: 'error',
+          title: 'No Data for Export',
+          message: 'The selected report type has no data to export. Please try another selection.'
+        });
         return;
       }
 
-      const rows = data.map((item: any) => {
+      const rows = data.map((item: any, index: number) => {
+        const rowId = index + 1;
         if (reportType === 'applicants') {
-          return [item.id, item.first_name, item.last_name, item.email, item.job_title || 'N/A', item.status, new Date(item.applied_at).toLocaleDateString()];
+          return [rowId, item.first_name, item.last_name, item.email, item.job_title || 'N/A', item.status, new Date(item.applied_at).toLocaleDateString()];
         } else if (reportType === 'employees') {
-          return [item.id, item.name, item.email, item.job_title, item.department, new Date(item.hired_date).toLocaleDateString()];
+          return [rowId, item.name, item.email, item.job_title, item.department, new Date(item.hired_date).toLocaleDateString()];
         } else if (reportType === 'decisions') {
-          return [item.id, item.name, item.email, item.job_title, item.status, item.reason, new Date(item.date).toLocaleDateString()];
+          return [rowId, item.name, item.email, item.job_title, item.status, item.reason, new Date(item.date).toLocaleDateString()];
         } else if (reportType === 'login_activity') {
           return [item.user, item.action, new Date(item.timestamp).toLocaleString(), new Date(item.loginTime).toLocaleString()];
         }
@@ -155,7 +174,12 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error('Failed to export report:', error);
-      alert('Failed to generate report');
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Export Failed',
+        message: 'Could not generate the report due to an error. Please try again later.'
+      });
     }
   };
 
@@ -540,7 +564,15 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
+
+      {/* Status Modal */}
+      <StatusModal
+        isOpen={statusModal.isOpen}
+        onClose={() => setStatusModal(prev => ({ ...prev, isOpen: false }))}
+        title={statusModal.title}
+        message={statusModal.message}
+        type={statusModal.type}
+      />
     </div>
   );
 }
-

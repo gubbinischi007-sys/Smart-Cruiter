@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { jobsApi } from '../services/api';
 import { logAction } from '../utils/historyLogger';
+import StatusModal from '../components/StatusModal';
 
 export default function EditJob() {
   const navigate = useNavigate();
@@ -18,6 +19,20 @@ export default function EditJob() {
   });
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+
+  // Modal State
+  const [statusModal, setStatusModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'success'
+  });
+
 
   useEffect(() => {
     loadJob();
@@ -39,8 +54,14 @@ export default function EditJob() {
       });
     } catch (error) {
       console.error('Failed to load job:', error);
-      alert('Failed to load job');
-      navigate('/admin/jobs');
+      // We will rely on loading logic for this usually, but a modal helps if user stuck
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to load job details.',
+      });
+      // navigate('/admin/jobs'); // Only navigate on close
     } finally {
       setInitialLoading(false);
     }
@@ -55,12 +76,34 @@ export default function EditJob() {
     try {
       await jobsApi.update(id, formData);
       logAction(`Updated job: ${formData.title}`);
-      navigate(`/admin/jobs/${id}`);
+
+      setStatusModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Success',
+        message: 'Job updated successfully.',
+      });
+
     } catch (error) {
       console.error('Failed to update job:', error);
-      alert('Failed to update job');
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Update Failed',
+        message: 'Failed to update job details.',
+      });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleModalClose = () => {
+    setStatusModal(prev => ({ ...prev, isOpen: false }));
+    // Navigate on success close
+    if (statusModal.type === 'success') {
+      navigate(`/admin/jobs/${id}`);
+    } else if (statusModal.title === 'Error' && statusModal.message === 'Failed to load job details.') {
+      navigate('/admin/jobs');
     }
   };
 
@@ -181,7 +224,15 @@ export default function EditJob() {
           </div>
         </form>
       </div>
+
+      {/* Status Modal */}
+      <StatusModal
+        isOpen={statusModal.isOpen}
+        onClose={handleModalClose}
+        title={statusModal.title}
+        message={statusModal.message}
+        type={statusModal.type}
+      />
     </div>
   );
 }
-

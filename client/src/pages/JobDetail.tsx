@@ -4,6 +4,8 @@ import { useParams, Link } from 'react-router-dom';
 import { jobsApi, applicantsApi, analyticsApi, interviewsApi } from '../services/api';
 import { logAction } from '../utils/historyLogger';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import ConfirmationModal from '../components/ConfirmationModal';
+import StatusModal from '../components/StatusModal';
 
 interface Job {
   id: string;
@@ -43,6 +45,35 @@ export default function JobDetail() {
   });
   const [linkCopied, setLinkCopied] = useState(false);
 
+  // Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'danger' | 'delete' | 'info' | 'warning';
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: '',
+    confirmLabel: 'Confirm',
+    onConfirm: () => { },
+  });
+
+  const [statusModal, setStatusModal] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'error';
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: '',
+  });
+
   useEffect(() => {
     if (id) {
       loadData();
@@ -69,44 +100,90 @@ export default function JobDetail() {
 
   const handleBulkAcceptance = async () => {
     if (selectedApplicants.size === 0) {
-      alert('Please select at least one applicant');
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'No Selection',
+        message: 'Please select at least one applicant.'
+      });
       return;
     }
 
-    if (!confirm(`Send acceptance emails to ${selectedApplicants.size} applicants?`)) return;
-
-    try {
-      const { emailApi } = await import('../services/api');
-      await emailApi.sendBulkAcceptance(Array.from(selectedApplicants));
-      logAction(`Bulk accepted ${selectedApplicants.size} applicants`);
-      alert('Acceptance emails sent successfully');
-      setSelectedApplicants(new Set());
-      loadData();
-    } catch (error) {
-      console.error('Failed to send acceptance emails:', error);
-      alert('Failed to send acceptance emails');
-    }
+    setConfirmModal({
+      isOpen: true,
+      type: 'success',
+      title: 'Send Acceptance Emails?',
+      message: `Are you sure you want to send acceptance emails to ${selectedApplicants.size} applicants? This action cannot be undone.`,
+      confirmLabel: `Accept ${selectedApplicants.size} Applicants`,
+      onConfirm: async () => {
+        try {
+          const { emailApi } = await import('../services/api');
+          await emailApi.sendBulkAcceptance(Array.from(selectedApplicants));
+          logAction(`Bulk accepted ${selectedApplicants.size} applicants`);
+          setStatusModal({
+            isOpen: true,
+            type: 'success',
+            title: 'Success',
+            message: 'Acceptance emails sent successfully.'
+          });
+          setSelectedApplicants(new Set());
+          loadData();
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (error) {
+          console.error('Failed to send acceptance emails:', error);
+          setStatusModal({
+            isOpen: true,
+            type: 'error',
+            title: 'Action Failed',
+            message: 'Failed to send acceptance emails. Please try again.'
+          });
+        }
+      }
+    });
   };
 
   const handleBulkRejection = async () => {
     if (selectedApplicants.size === 0) {
-      alert('Please select at least one applicant');
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'No Selection',
+        message: 'Please select at least one applicant.'
+      });
       return;
     }
 
-    if (!confirm(`Send rejection emails to ${selectedApplicants.size} applicants?`)) return;
-
-    try {
-      const { emailApi } = await import('../services/api');
-      await emailApi.sendBulkRejection(Array.from(selectedApplicants));
-      logAction(`Bulk rejected ${selectedApplicants.size} applicants`);
-      alert('Rejection emails sent successfully');
-      setSelectedApplicants(new Set());
-      loadData();
-    } catch (error) {
-      console.error('Failed to send rejection emails:', error);
-      alert('Failed to send rejection emails');
-    }
+    setConfirmModal({
+      isOpen: true,
+      type: 'danger',
+      title: 'Send Rejection Emails?',
+      message: `Are you sure you want to send rejection emails to ${selectedApplicants.size} applicants? This will update their status to "Rejected" and cannot be undone.`,
+      confirmLabel: `Reject ${selectedApplicants.size} Applicants`,
+      onConfirm: async () => {
+        try {
+          const { emailApi } = await import('../services/api');
+          await emailApi.sendBulkRejection(Array.from(selectedApplicants));
+          logAction(`Bulk rejected ${selectedApplicants.size} applicants`);
+          setStatusModal({
+            isOpen: true,
+            type: 'success',
+            title: 'Success',
+            message: 'Rejection emails sent successfully.'
+          });
+          setSelectedApplicants(new Set());
+          loadData();
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (error) {
+          console.error('Failed to send rejection emails:', error);
+          setStatusModal({
+            isOpen: true,
+            type: 'error',
+            title: 'Action Failed',
+            message: 'Failed to send rejection emails. Please try again.'
+          });
+        }
+      }
+    });
   };
 
   const toggleApplicantSelection = (applicantId: string) => {
@@ -126,7 +203,12 @@ export default function JobDetail() {
       loadData();
     } catch (error) {
       console.error('Failed to update applicant stage:', error);
-      alert('Failed to update applicant stage');
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Update Failed',
+        message: 'Failed to update applicant stage.'
+      });
     }
   };
 
@@ -155,7 +237,12 @@ export default function JobDetail() {
         ...interviewForm,
       });
       logAction(`Scheduled interview for applicant ${selectedApplicantForInterview} on ${interviewForm.scheduled_at}`);
-      alert('Interview scheduled successfully!');
+      setStatusModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Interview Scheduled',
+        message: 'Interview has been scheduled successfully and the candidate has been notified.'
+      });
       setShowInterviewForm(false);
       setSelectedApplicantForInterview(null);
       setInterviewForm({
@@ -167,7 +254,12 @@ export default function JobDetail() {
       loadData();
     } catch (error) {
       console.error('Failed to schedule interview:', error);
-      alert('Failed to schedule interview');
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Scheduling Failed',
+        message: 'Failed to schedule interview. Please try again.'
+      });
     }
   };
 
@@ -567,7 +659,26 @@ export default function JobDetail() {
           </table>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        confirmLabel={confirmModal.confirmLabel}
+      />
+
+      {/* Status Modal */}
+      <StatusModal
+        isOpen={statusModal.isOpen}
+        onClose={() => setStatusModal(prev => ({ ...prev, isOpen: false }))}
+        title={statusModal.title}
+        message={statusModal.message}
+        type={statusModal.type}
+      />
     </div>
   );
 }
-

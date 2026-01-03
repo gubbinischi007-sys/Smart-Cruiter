@@ -4,6 +4,7 @@ import { jobsApi, applicantsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, CheckCircle, AlertCircle, Upload, FileText, Link as LinkIcon, X } from 'lucide-react';
 import './ApplyJob.css';
+import StatusModal from '../components/StatusModal';
 
 interface Job {
   id: string;
@@ -31,7 +32,7 @@ export default function ApplyJob() {
   const [resumeFile, setResumeFile] = useState<File | null>(null);
 
   // Modal State
-  const [modalState, setModalState] = useState<{
+  const [statusModal, setStatusModal] = useState<{
     isOpen: boolean;
     title: string;
     message: string;
@@ -44,7 +45,10 @@ export default function ApplyJob() {
   });
 
   const closeModal = () => {
-    setModalState(prev => ({ ...prev, isOpen: false }));
+    setStatusModal(prev => ({ ...prev, isOpen: false }));
+    if (statusModal.type === 'success') {
+      navigate(`/candidate/dashboard`);
+    }
   };
 
   useEffect(() => {
@@ -93,7 +97,7 @@ export default function ApplyJob() {
         ...formData,
       });
 
-      setModalState({
+      setStatusModal({
         isOpen: true,
         title: 'Application Submitted',
         message: 'Your application has been submitted successfully! Good luck.',
@@ -102,7 +106,7 @@ export default function ApplyJob() {
       // Navigation will happen when modal is closed
     } catch (error: any) {
       console.error('Failed to submit application:', error);
-      setModalState({
+      setStatusModal({
         isOpen: true,
         title: 'Submission Failed',
         message: error.response?.data?.error || 'Failed to submit application. Please try again.',
@@ -117,7 +121,12 @@ export default function ApplyJob() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (file.type !== 'application/pdf') {
-        alert('Please upload a PDF file.');
+        setStatusModal({
+          isOpen: true,
+          title: 'Invalid File',
+          message: 'Please upload a PDF file.',
+          type: 'error'
+        });
         return;
       }
       setResumeFile(file);
@@ -237,7 +246,12 @@ export default function ApplyJob() {
               type="button"
               onClick={() => {
                 navigator.clipboard.writeText(window.location.href);
-                alert('Job link copied to clipboard!');
+                setStatusModal({
+                  isOpen: true,
+                  title: 'Copied!',
+                  message: 'Job link copied to clipboard.',
+                  type: 'success'
+                });
               }}
               style={{
                 background: 'rgba(255,255,255,0.1)',
@@ -498,30 +512,14 @@ export default function ApplyJob() {
         </div>
       </div>
 
-      {/* Custom Modal */}
-      {modalState.isOpen && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className={`modal-icon ${modalState.type}`}>
-              {modalState.type === 'success' ? <CheckCircle size={32} /> : <AlertCircle size={32} />}
-            </div>
-            <h3 className="modal-title">{modalState.title}</h3>
-            <p className="modal-message">{modalState.message}</p>
-            <button
-              className={`modal-btn ${modalState.type}`}
-              onClick={() => {
-                closeModal();
-                if (modalState.type === 'success') {
-                  navigate(`/candidate/dashboard`);
-                }
-              }}
-            >
-              {modalState.type === 'success' ? 'Go to Dashboard' : 'Close'}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Status Modal */}
+      <StatusModal
+        isOpen={statusModal.isOpen}
+        onClose={closeModal}
+        title={statusModal.title}
+        message={statusModal.message}
+        type={statusModal.type}
+      />
     </div>
   );
 }
-

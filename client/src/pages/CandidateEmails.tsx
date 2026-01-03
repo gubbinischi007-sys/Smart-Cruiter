@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { Mail, Clock, CheckCircle, AlertCircle, ArrowLeft, XCircle, Trash2, CheckSquare, Square } from 'lucide-react';
 import { logApplicationDecision } from '../utils/historyLogger';
 import ConfirmationModal from '../components/ConfirmationModal';
+import StatusModal from '../components/StatusModal';
 
 interface EmailNotification {
     id: string;
@@ -27,8 +28,6 @@ export default function CandidateEmails() {
     const [applicant, setApplicant] = useState<any>(null);
     const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set());
 
-    // Modal State
-    // Modal State
     // Modal State
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean;
@@ -101,7 +100,12 @@ export default function CandidateEmails() {
                     refreshUnreadCount();
                 } catch (error) {
                     console.error("Failed to delete email", error);
-                    alert("Failed to delete message");
+                    setStatusModal({
+                        isOpen: true,
+                        type: 'error',
+                        title: 'Delete Failed',
+                        message: 'Failed to delete message. Please try again.'
+                    });
                 }
             }
         });
@@ -132,7 +136,12 @@ export default function CandidateEmails() {
                     refreshUnreadCount();
                 } catch (error) {
                     console.error("Failed to bulk delete emails", error);
-                    alert("Failed to delete selected messages");
+                    setStatusModal({
+                        isOpen: true,
+                        type: 'error',
+                        title: 'Delete Failed',
+                        message: 'Failed to delete selected messages. Please try again.'
+                    });
                 }
             }
         });
@@ -349,7 +358,7 @@ export default function CandidateEmails() {
                                                                         });
 
                                                                         // 3. Remove from applicants table to prevent duplicates or accidental rejections
-                                                                        await applicantsApi.delete(applicant.id);
+                                                                        // await applicantsApi.delete(applicant.id);
                                                                     }
                                                                     loadEmails();
                                                                     setApplicantOfferStatus('accepted');
@@ -427,7 +436,7 @@ export default function CandidateEmails() {
                                                                         });
 
                                                                         // 2. Remove from applicants table
-                                                                        await applicantsApi.delete(applicant.id);
+                                                                        // await applicantsApi.delete(applicant.id);
                                                                     }
                                                                     loadEmails();
                                                                     setApplicantOfferStatus('rejected');
@@ -488,83 +497,6 @@ export default function CandidateEmails() {
                         type={confirmModal.type}
                         confirmLabel={confirmModal.confirmLabel}
                     />
-
-                    {/* STATUS MODAL (Success/Error) */}
-                    {statusModal.isOpen && (
-                        <div style={{
-                            position: 'fixed',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            backdropFilter: 'blur(8px)',
-                            zIndex: 10000,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            animation: 'fadeIn 0.3s ease-out'
-                        }}>
-                            <div style={{
-                                backgroundColor: '#1e293b',
-                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                borderRadius: '24px',
-                                padding: '40px',
-                                maxWidth: '440px',
-                                width: '90%',
-                                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                                textAlign: 'center'
-                            }}>
-                                <div style={{
-                                    width: '64px',
-                                    height: '64px',
-                                    borderRadius: '50%',
-                                    backgroundColor: statusModal.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    margin: '0 auto 24px',
-                                    color: statusModal.type === 'success' ? '#10b981' : '#ef4444'
-                                }}>
-                                    {statusModal.type === 'success' ? <CheckCircle size={32} /> : <XCircle size={32} />}
-                                </div>
-
-                                <h3 style={{
-                                    color: 'white',
-                                    fontSize: '1.5rem',
-                                    fontWeight: '700',
-                                    marginBottom: '12px',
-                                    fontFamily: 'Outfit, sans-serif'
-                                }}>
-                                    {statusModal.title}
-                                </h3>
-                                <p style={{ color: '#94a3b8', marginBottom: '32px', lineHeight: '1.6', fontSize: '1.05rem' }}>
-                                    {statusModal.message}
-                                </p>
-
-                                <button
-                                    onClick={() => setStatusModal(prev => ({ ...prev, isOpen: false }))}
-                                    style={{
-                                        width: '100%',
-                                        padding: '14px',
-                                        borderRadius: '12px',
-                                        background: statusModal.type === 'success' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                                        border: 'none',
-                                        color: 'white',
-                                        fontWeight: '700',
-                                        cursor: 'pointer',
-                                        fontSize: '1rem',
-                                        boxShadow: '0 10px 20px -5px rgba(0,0,0,0.3)',
-                                        transition: 'transform 0.2s'
-                                    }}
-                                    onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                                    onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                                >
-                                    Close
-                                </button>
-                            </div>
-                        </div>
-                    )}
                 </div>
             ) : (
                 // --- LIST VIEW ---
@@ -771,83 +703,13 @@ export default function CandidateEmails() {
             />
 
             {/* STATUS MODAL - Rendered Globally */}
-            {
-                statusModal.isOpen && (
-                    <div style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        backdropFilter: 'blur(8px)',
-                        zIndex: 10000,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        animation: 'fadeIn 0.3s ease-out'
-                    }}>
-                        <div style={{
-                            backgroundColor: '#1e293b',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            borderRadius: '24px',
-                            padding: '40px',
-                            maxWidth: '440px',
-                            width: '90%',
-                            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                            textAlign: 'center'
-                        }}>
-                            <div style={{
-                                width: '64px',
-                                height: '64px',
-                                borderRadius: '50%',
-                                backgroundColor: statusModal.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                margin: '0 auto 24px',
-                                color: statusModal.type === 'success' ? '#10b981' : '#ef4444'
-                            }}>
-                                {statusModal.type === 'success' ? <CheckCircle size={32} /> : <XCircle size={32} />}
-                            </div>
-
-                            <h3 style={{
-                                color: 'white',
-                                fontSize: '1.5rem',
-                                fontWeight: '700',
-                                marginBottom: '12px',
-                                fontFamily: 'Outfit, sans-serif'
-                            }}>
-                                {statusModal.title}
-                            </h3>
-                            <p style={{ color: '#94a3b8', marginBottom: '32px', lineHeight: '1.6', fontSize: '1.05rem' }}>
-                                {statusModal.message}
-                            </p>
-
-                            <button
-                                onClick={() => setStatusModal(prev => ({ ...prev, isOpen: false }))}
-                                style={{
-                                    width: '100%',
-                                    padding: '14px',
-                                    borderRadius: '12px',
-                                    background: statusModal.type === 'success' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                                    border: 'none',
-                                    color: 'white',
-                                    fontWeight: '700',
-                                    cursor: 'pointer',
-                                    fontSize: '1rem',
-                                    boxShadow: '0 10px 20px -5px rgba(0,0,0,0.3)',
-                                    transition: 'transform 0.2s'
-                                }}
-                                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                )
-            }
-        </div >
+            <StatusModal
+                isOpen={statusModal.isOpen}
+                onClose={() => setStatusModal(prev => ({ ...prev, isOpen: false }))}
+                title={statusModal.title}
+                message={statusModal.message}
+                type={statusModal.type}
+            />
+        </div>
     );
 }

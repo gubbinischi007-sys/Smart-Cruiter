@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { jobsApi } from '../services/api';
 import { ArrowLeft, MapPin, Briefcase, Clock, FileText, CheckCircle, ArrowRight } from 'lucide-react';
 import './PublicJobDetail.css';
+import StatusModal from '../components/StatusModal';
 
 interface Job {
   id: string;
@@ -19,6 +20,19 @@ export default function PublicJobDetail() {
   const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Modal State
+  const [statusModal, setStatusModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'success'
+  });
 
   useEffect(() => {
     if (id) {
@@ -191,7 +205,12 @@ export default function PublicJobDetail() {
             <button
               onClick={() => {
                 navigator.clipboard.writeText(window.location.href);
-                alert('Job link copied to clipboard!');
+                setStatusModal({
+                  isOpen: true,
+                  title: 'Copied!',
+                  message: 'Job link copied to clipboard.',
+                  type: 'success'
+                });
               }}
               className="share-btn copy"
               style={{
@@ -230,7 +249,15 @@ export default function PublicJobDetail() {
           </div>
         </div>
       </div>
+
+      {/* Status Modal */}
+      <StatusModal
+        isOpen={statusModal.isOpen}
+        onClose={() => setStatusModal(prev => ({ ...prev, isOpen: false }))}
+        title={statusModal.title}
+        message={statusModal.message}
+        type={statusModal.type}
+      />
     </div>
   );
 }
-

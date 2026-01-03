@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { jobsApi } from '../services/api';
 import { logAction } from '../utils/historyLogger';
 import './CreateJob.css';
+import StatusModal from '../components/StatusModal';
 
 export default function CreateJob() {
   const navigate = useNavigate();
@@ -17,6 +18,19 @@ export default function CreateJob() {
   });
   const [loading, setLoading] = useState(false);
 
+  // Modal State
+  const [statusModal, setStatusModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'success'
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -24,14 +38,39 @@ export default function CreateJob() {
     try {
       await jobsApi.create(formData);
       logAction(`Created new job: ${formData.title}`);
-      navigate('/admin/jobs');
+
+      // We could show a success modal here, but navigating back to the list 
+      // is a common pattern. If we want a modal, we'd need to wait for close.
+      // For now, let's just navigate which is cleaner for "Create" actions unless error.
+      // Or better yet, let's show success modal then navigate on close.
+      setStatusModal({
+        isOpen: true,
+        title: 'Success',
+        message: 'Job created successfully.',
+        type: 'success'
+      });
+
     } catch (error) {
       console.error('Failed to create job:', error);
-      alert('Failed to create job');
+      setStatusModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Failed to create job. Please try again.',
+        type: 'error'
+      });
     } finally {
       setLoading(false);
     }
   };
+
+  const handleModalClose = () => {
+    setStatusModal(prev => ({ ...prev, isOpen: false }));
+    // Navigate on success close
+    if (statusModal.type === 'success') {
+      navigate('/admin/jobs');
+    }
+  };
+
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({
@@ -151,7 +190,15 @@ export default function CreateJob() {
           </div>
         </form>
       </div>
+
+      {/* Status Modal */}
+      <StatusModal
+        isOpen={statusModal.isOpen}
+        onClose={handleModalClose}
+        title={statusModal.title}
+        message={statusModal.message}
+        type={statusModal.type}
+      />
     </div>
   );
 }
-

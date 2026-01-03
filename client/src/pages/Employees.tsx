@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { employeesApi } from '../services/api';
 import { Users, Search, Calendar, Briefcase, Mail, UserMinus, X } from 'lucide-react';
 import { logApplicationDecision, logAction } from '../utils/historyLogger';
+import ConfirmationModal from '../components/ConfirmationModal';
+import StatusModal from '../components/StatusModal';
 import './Employees.css';
 
 interface Employee {
@@ -19,6 +21,34 @@ export default function Employees() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const searchInputRef = useRef<HTMLInputElement>(null);
+
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        type: 'success' | 'danger' | 'delete' | 'info' | 'warning';
+        title: string;
+        message: string;
+        confirmLabel: string;
+        onConfirm: () => void;
+    }>({
+        isOpen: false,
+        type: 'danger',
+        title: '',
+        message: '',
+        confirmLabel: 'Confirm',
+        onConfirm: () => { },
+    });
+
+    const [statusModal, setStatusModal] = useState<{
+        isOpen: boolean;
+        type: 'success' | 'error';
+        title: string;
+        message: string;
+    }>({
+        isOpen: false,
+        type: 'success',
+        title: '',
+        message: '',
+    });
 
     useEffect(() => {
         loadEmployees();
@@ -45,32 +75,52 @@ export default function Employees() {
         }
     };
 
-    const handleDeactivate = async (employee: Employee) => {
-        if (!window.confirm(`Are you sure you want to deactivate ${employee.name}? They will be removed from the employee directory and moved to history.`)) {
-            return;
-        }
+    const handleDeactivate = (employee: Employee) => {
+        setConfirmModal({
+            isOpen: true,
+            type: 'delete',
+            title: 'Deactivate Employee?',
+            message: `Are you sure you want to deactivate ${employee.name}? They will be removed from the employee directory and moved to history.`,
+            confirmLabel: 'Deactivate',
+            onConfirm: async () => {
+                try {
+                    // 1. Log to History as a termination/status change
+                    await logApplicationDecision({
+                        name: employee.name,
+                        email: employee.email,
+                        job_title: employee.job_title || 'Employee',
+                        status: 'Rejected', // Representing termination in history
+                        reason: 'Employee deactivated/terminated from the company.'
+                    });
 
-        try {
-            // 1. Log to History as a termination/status change
-            await logApplicationDecision({
-                name: employee.name,
-                email: employee.email,
-                job_title: employee.job_title || 'Employee',
-                status: 'Rejected', // Representing termination in history
-                reason: 'Employee deactivated/terminated from the company.'
-            });
+                    // 2. Log to Activity (Login history)
+                    logAction(`Removed employee: ${employee.name} (${employee.email})`);
 
-            // 2. Log to Activity (Login history)
-            logAction(`Removed employee: ${employee.name} (${employee.email})`);
+                    // 3. Remove from Employees table
+                    await employeesApi.delete(employee.id);
 
-            // 3. Remove from Employees table
-            await employeesApi.delete(employee.id);
+                    // 4. Refresh list
+                    loadEmployees();
+                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
 
-            // 3. Refresh list
-            loadEmployees();
-        } catch (error) {
-            console.error('Failed to deactivate employee:', error);
-        }
+                    setStatusModal({
+                        isOpen: true,
+                        type: 'success',
+                        title: 'Employee Deactivated',
+                        message: `${employee.name} has been successfully deactivated.`
+                    });
+
+                } catch (error) {
+                    console.error('Failed to deactivate employee:', error);
+                    setStatusModal({
+                        isOpen: true,
+                        type: 'error',
+                        title: 'Action Failed',
+                        message: 'Failed to deactivate employee. Please try again.'
+                    });
+                }
+            }
+        });
     };
 
     const filteredEmployees = employees.filter(emp =>
@@ -227,6 +277,24 @@ export default function Employees() {
                     </tbody>
                 </table>
             </div>
+
+            <ConfirmationModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                type={confirmModal.type}
+                confirmLabel={confirmModal.confirmLabel}
+            />
+
+            <StatusModal
+                isOpen={statusModal.isOpen}
+                onClose={() => setStatusModal(prev => ({ ...prev, isOpen: false }))}
+                title={statusModal.title}
+                message={statusModal.message}
+                type={statusModal.type}
+            />
         </div>
     );
 }
