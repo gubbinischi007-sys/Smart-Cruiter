@@ -22,20 +22,28 @@ initDatabase().then(() => {
   console.log('Database initialized');
 });
 
+// Create an API router to handle all routes
+const apiRouter = express.Router();
+
 // Routes
-app.use('/api/jobs', jobRoutes);
-app.use('/api/applicants', applicantRoutes);
-app.use('/api/interviews', interviewRoutes);
-app.use('/api/emails', emailRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/employees', employeeRoutes);
-app.use('/api/history', historyRoutes);
+apiRouter.use('/jobs', jobRoutes);
+apiRouter.use('/applicants', applicantRoutes);
+apiRouter.use('/interviews', interviewRoutes);
+apiRouter.use('/emails', emailRoutes);
+apiRouter.use('/analytics', analyticsRoutes);
+apiRouter.use('/notifications', notificationRoutes);
+apiRouter.use('/employees', employeeRoutes);
+apiRouter.use('/history', historyRoutes);
 
 // Health check
-app.get('/api/health', (req, res) => {
+apiRouter.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+
+// Mount the router on both /api and /
+// This ensures routes work locally (usually /api/...) and on Vercel (where /api might be stripped)
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 // Conditionally start the server if not running on Vercel
 if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
