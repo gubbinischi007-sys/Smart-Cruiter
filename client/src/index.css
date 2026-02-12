@@ -124,6 +124,14 @@ a {
   padding: 0 24px;
 }
 
+.state-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  width: 100%;
+}
+
 /* Modern Card Style */
 .card {
   background: var(--bg-card);

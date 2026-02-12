@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { jobsApi, applicantsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft, CheckCircle, AlertCircle, Upload, FileText, Link as LinkIcon, X } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Link as LinkIcon, X } from 'lucide-react';
 import './ApplyJob.css';
 import StatusModal from '../components/StatusModal';
 
@@ -90,6 +90,16 @@ export default function ApplyJob() {
     e.preventDefault();
     if (!id) return;
 
+    if (resumeMode === 'file' && !resumeFile && !formData.resume_url) {
+      setStatusModal({
+        isOpen: true,
+        title: 'Resume Required',
+        message: 'Please upload your resume to continue.',
+        type: 'error'
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
       await applicantsApi.create({
@@ -132,15 +142,15 @@ export default function ApplyJob() {
       setResumeFile(file);
       // In a real app, you would upload this file to S3/Blob storage and get a URL.
       // For this demo, we'll simulate a URL so the backend validation passes.
-      setFormData({ ...formData, resume_url: `https://storage.smart-cruiter.com/resumes/${file.name}` });
+      setFormData(prev => ({ ...prev, resume_url: `https://storage.smart-cruiter.com/resumes/${file.name}` }));
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       [e.target.name]: e.target.value,
-    });
+    }));
   };
 
   if (loading) {

@@ -90,7 +90,7 @@ export const historyApi = {
     name: string;
     email: string;
     job_title: string;
-    status: 'Accepted' | 'Rejected';
+    status: 'Accepted' | 'Rejected' | 'Deactivated';
     reason: string;
   }) => api.post('/history', data),
   clearAll: () => api.delete('/history'),

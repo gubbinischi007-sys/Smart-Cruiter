@@ -89,7 +89,7 @@ export default function Employees() {
                         name: employee.name,
                         email: employee.email,
                         job_title: employee.job_title || 'Employee',
-                        status: 'Rejected', // Representing termination in history
+                        status: 'Deactivated', // Representing termination in history
                         reason: 'Employee deactivated/terminated from the company.'
                     });
 

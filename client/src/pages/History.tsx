@@ -24,7 +24,7 @@ interface ApplicationRecord {
     name: string;
     email: string;
     job_title: string;
-    status: 'Accepted' | 'Rejected';
+    status: 'Accepted' | 'Rejected' | 'Deactivated';
     reason: string;
     date: string;
 }
@@ -186,7 +186,10 @@ export default function History() {
                                 {appHistory.map((record, index) => (
                                     <tr key={index}>
                                         <td className="user-cell">
-                                            <div className="user-avatar" style={{ background: record.status === 'Accepted' ? '#10b981' : '#ef4444' }}>
+                                            <div className="user-avatar" style={{
+                                                background: record.status === 'Accepted' ? '#10b981' :
+                                                    record.status === 'Deactivated' ? '#f59e0b' : '#ef4444'
+                                            }}>
                                                 {record.name.charAt(0)}
                                             </div>
                                             <div>
@@ -199,8 +202,10 @@ export default function History() {
                                         </td>
                                         <td>
                                             <span className={`px-2 py-1 rounded text-xs font-medium ${record.status === 'Accepted'
-                                                ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                                                : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                                    ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                                    : record.status === 'Deactivated'
+                                                        ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                                                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
                                                 }`}>
                                                 {record.status}
                                             </span>

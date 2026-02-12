@@ -43,7 +43,7 @@ export default function CandidateDashboard() {
 
     useEffect(() => {
         loadApplications();
-        const interval = setInterval(loadApplications, 10000); // Poll every 10 seconds
+        const interval = setInterval(loadApplications, 3000); // Poll every 3 seconds
         return () => clearInterval(interval);
     }, [user.email]);
 
@@ -78,7 +78,7 @@ export default function CandidateDashboard() {
     const stats = [
         { label: 'Applications', value: myApplications.length, icon: Briefcase, color: '#3b82f6' },
         { label: 'Interviews', value: myApplications.filter(a => a.stage === 'interview').length, icon: Clock, color: '#f59e0b' },
-        { label: 'Offers', value: myApplications.filter(a => a.stage === 'hired' || (a.offerStatus && a.offerStatus !== 'rejected')).length, icon: CheckCircle, color: '#10b981' },
+        { label: 'Offers', value: myApplications.filter(a => a.offerStatus === 'pending').length, icon: CheckCircle, color: '#10b981' },
     ];
 
     if (loading) {

@@ -28,7 +28,7 @@ export const logApplicationDecision = async (record: {
     name: string;
     email: string;
     job_title: string;
-    status: 'Accepted' | 'Rejected';
+    status: 'Accepted' | 'Rejected' | 'Deactivated';
     reason: string;
 }) => {
     try {

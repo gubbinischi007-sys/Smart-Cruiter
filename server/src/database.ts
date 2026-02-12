@@ -6,7 +6,14 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../database.sqlite');
+// On Vercel, we must use /tmp for writable filesystem
+const isVercel = process.env.VERCEL === '1';
+const defaultDbPath = isVercel
+  ? '/tmp/database.sqlite'
+  : path.join(__dirname, '../database.sqlite');
+
+const DB_PATH = process.env.DATABASE_PATH || defaultDbPath;
+
 
 let db: sqlite3.Database;
 
