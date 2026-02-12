@@ -186,5 +186,34 @@ export async function initDatabase(): Promise<void> {
   await run(`CREATE INDEX IF NOT EXISTS idx_history_email ON application_history(email)`);
 
   console.log('Database tables created/verified');
+
+  // Seed data for demo if jobs table is empty
+  const jobCount = await get<{ count: number }>('SELECT COUNT(*) as count FROM jobs');
+  if (jobCount && jobCount.count === 0) {
+    console.log('Seeding initial data for demo...');
+    const softwareEngineerId = 'job_1';
+    const productManagerId = 'job_2';
+    const now = new Date().toISOString();
+
+    await run(`
+      INSERT INTO jobs (id, title, department, location, type, description, requirements, status, created_at, updated_at)
+      VALUES 
+      (?, 'Senior Software Engineer', 'Engineering', 'Remote', 'Full-time', 'We are looking for a Senior Software Engineer...', '5+ years experience, React, Node.js', 'open', ?, ?),
+      (?, 'Product Manager', 'Product', 'New York', 'Full-time', 'Seeking a Product Manager to lead our recruitment tool...', '3+ years experience, Agile, UX knowledge', 'open', ?, ?)
+    `, [softwareEngineerId, now, now, productManagerId, now, now]);
+
+    const applicant1Id = 'app_1';
+    await run(`
+      INSERT INTO applicants (id, job_id, first_name, last_name, email, phone, stage, status, applied_at, updated_at)
+      VALUES (?, ?, 'John', 'Doe', 'john.doe@example.com', '123-456-7890', 'interviewing', 'active', ?, ?)
+    `, [applicant1Id, softwareEngineerId, now, now]);
+
+    await run(`
+      INSERT INTO application_history (id, name, email, job_title, status, date)
+      VALUES (?, 'Jane Smith', 'jane.smith@example.com', 'Software Engineer', 'Accepted', ?)
+    `, ['hist_1', now]);
+
+    console.log('Seeding completed');
+  }
 }
 
