@@ -30,9 +30,43 @@ const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
 });
+
 async function sendEmail(opts: { to: string; subject: string; html: string }) {
-    try { await transporter.sendMail({ from: process.env.EMAIL_USER, ...opts }); }
-    catch (e) { console.error('Email error:', e); }
+    try {
+        // Save copy to notifications table so it appears in Candidate inbox
+        await sb.from('notifications').insert({
+            id: uuidv4(),
+            recipient_email: opts.to,
+            subject: opts.subject,
+            message: opts.html,
+            type: 'email',
+            is_read: 0,
+            created_at: new Date().toISOString()
+        });
+
+        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+            await transporter.sendMail({ from: process.env.EMAIL_USER, ...opts });
+        } else {
+            console.log('Would send email (credentials missing):', opts.to);
+        }
+    } catch (e) { console.error('Email error:', e); }
+}
+
+async function sendBulkEmails(
+    recipients: any[],
+    type: string,
+    getOpts: (r: any) => { subject: string, html: string }
+) {
+    let successful = 0;
+    for (const r of recipients) {
+        if (!r.email) continue;
+        const opts = getOpts(r);
+        try {
+            await sendEmail({ to: r.email, ...opts });
+            successful++;
+        } catch (e) { console.error(e); }
+    }
+    return { successful, count: recipients.length };
 }
 
 // ── Express ───────────────────────────────────────────────────────────────────
@@ -460,6 +494,92 @@ api.post('/emails/send', async (req: any, res: any) => {
     try {
         await sendEmail(req.body);
         res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+api.post('/emails/bulk-acceptance', async (req: any, res: any) => {
+    try {
+        const { applicant_ids } = req.body;
+        if (!applicant_ids?.length) return res.status(400).json({ error: 'applicant_ids required' });
+
+        const { data: applicants } = await sb.from('applicants').select('*, jobs(title)').in('id', applicant_ids);
+        if (!applicants?.length) return res.status(404).json({ error: 'No applicants found' });
+
+        const mapped = applicants.map((a: any) => ({ ...a, job_title: a.jobs?.title }));
+        const result = await sendBulkEmails(mapped, 'acceptance', (a) => ({
+            subject: `Congratulations! You've been accepted for ${a.job_title}`,
+            html: `<h2>Congratulations ${a.first_name}!</h2>
+                   <p>We are pleased to inform you that you have been accepted for the position of <strong>${a.job_title}</strong>.</p>
+                   <p>Our HR team will be in touch with you shortly regarding next steps.</p>
+                   <p>Best regards,<br>Smart-Cruiter Team</p>`
+        }));
+        res.json({ message: `Sent ${result.successful} acceptance emails`, ...result });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+api.post('/emails/bulk-rejection', async (req: any, res: any) => {
+    try {
+        const { applicant_ids } = req.body;
+        if (!applicant_ids?.length) return res.status(400).json({ error: 'applicant_ids required' });
+
+        const { data: applicants } = await sb.from('applicants').select('*, jobs(title)').in('id', applicant_ids);
+        const mapped = (applicants || []).map((a: any) => ({ ...a, job_title: a.jobs?.title }));
+
+        const result = await sendBulkEmails(mapped, 'rejection', (a) => ({
+            subject: `Application Update: ${a.job_title}`,
+            html: `<h2>Thank you for your interest, ${a.first_name}</h2>
+                   <p>We appreciate you taking the time to apply for the position of <strong>${a.job_title}</strong>.</p>
+                   <p>After careful consideration, we have decided to move forward with other candidates. We encourage you to apply for future opportunities that match your skills and experience.</p>
+                   <p>Best regards,<br>Smart-Cruiter Team</p>`
+        }));
+        res.json({ message: `Sent ${result.successful} rejection emails`, ...result });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+api.post('/emails/duplicate-warning', async (req: any, res: any) => {
+    try {
+        const { applicant_ids } = req.body;
+        if (!applicant_ids?.length) return res.status(400).json({ error: 'applicant_ids required' });
+
+        const { data: applicants } = await sb.from('applicants').select('*').in('id', applicant_ids);
+        const unique = Array.from(new Map((applicants || []).map((item: any) => [item.email, item])).values());
+
+        const result = await sendBulkEmails(unique, 'duplicate_warning', (a: any) => ({
+            subject: `WARNING: Duplicate Applications Detected`,
+            html: `<h2>Hello ${a.first_name},</h2>
+                   <p>We noticed that you have submitted multiple applications to our system. This is a violation of our application policy.</p>
+                   <p style="color: red; font-weight: bold;">Please do not repeat this again.</p>
+                   <p><strong>If you continue to submit duplicate applications, you will be added to our blacklist and barred from future opportunities.</strong></p>
+                   <p>We have merged your duplicate profiles into a single record for now.</p>
+                   <p>Regards,<br>Smart-Cruiter Compliance Team</p>`
+        }));
+        res.json({ message: `Sent ${result.successful} warnings`, ...result });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+api.post('/emails/identity-warning', async (req: any, res: any) => {
+    try {
+        const { applicant_ids } = req.body;
+        if (!applicant_ids?.length) return res.status(400).json({ error: 'applicant_ids required' });
+
+        const { data: applicants } = await sb.from('applicants').select('*, jobs(title)').in('id', applicant_ids);
+        const mapped = (applicants || []).map((a: any) => ({ ...a, job_title: a.jobs?.title }));
+
+        const result = await sendBulkEmails(mapped, 'identity_warning', (a: any) => ({
+            subject: `URGENT: Resume Identity Verification Required`,
+            html: `<div style="font-family: sans-serif; padding: 20px; border: 1px solid #ef4444; border-radius: 8px;">
+                     <h2 style="color: #ef4444;">Identity Mismatch Detected</h2>
+                     <p>Hello <strong>${a.first_name}</strong>,</p>
+                     <p>During our automated screening process, we detected that the resume you uploaded for the <strong>${a.job_title}</strong> position appears to belong to another individual or contains conflicting identity information.</p>
+                     <p style="background: #fee2e2; padding: 10px; border-radius: 4px; color: #b91c1c;">
+                       <strong>Issue:</strong> The name on the uploaded resume document does not match the name on your application profile.
+                     </p>
+                     <p>Please log in to your portal and re-upload the correct document immediately to avoid disqualification from this and future roles.</p>
+                     <p>If you believe this is an error, please contact our support team.</p>
+                     <p>Regards,<br>Smart-Cruiter Security Team</p>
+                   </div>`
+        }));
+        res.json({ message: `Sent ${result.successful} warnings`, ...result });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
