@@ -316,29 +316,42 @@ api.delete('/employees/:id', async (req: any, res: any) => {
 // ══════════════════════════════════════════════════════════════════════════════
 api.get('/analytics/dashboard', async (_req: any, res: any) => {
     try {
-        const [
-            { count: totalJobs }, { count: openJobs }, { count: totalApplicants },
-            { data: byStage }, { data: byJob },
-        ] = await Promise.all([
+        // Run all counts in parallel
+        const [r1, r2, r3, r4, r5, r6, r7] = await Promise.all([
             sb.from('jobs').select('*', { count: 'exact', head: true }),
             sb.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'open'),
             sb.from('applicants').select('*', { count: 'exact', head: true }),
-            sb.from('applicants').select('stage').then(async ({ data }) => {
-                const map: Record<string, number> = {};
-                (data || []).forEach((r: any) => { map[r.stage] = (map[r.stage] || 0) + 1; });
-                return { data: Object.entries(map).map(([stage, count]) => ({ stage, count })) };
-            }),
-            sb.from('jobs').select('id, title, applicants(id)').then(async ({ data }) => {
-                return { data: (data || []).map((j: any) => ({ job_id: j.id, job_title: j.title, count: j.applicants?.length || 0 })).sort((a: any, b: any) => b.count - a.count).slice(0, 10) };
-            }),
+            sb.from('interviews').select('*', { count: 'exact', head: true }).eq('status', 'scheduled'),
+            sb.from('applicants').select('stage'),
+            sb.from('jobs').select('id, title'),
+            sb.from('applicants').select('job_id'),
         ]);
+
+        // Count by stage
+        const stageMap: Record<string, number> = {};
+        (r5.data || []).forEach((r: any) => { stageMap[r.stage] = (stageMap[r.stage] || 0) + 1; });
+        const applicantsByStage = Object.entries(stageMap).map(([stage, count]) => ({ stage, count }));
+
+        // Count applicants per job
+        const jobCountMap: Record<string, number> = {};
+        (r7.data || []).forEach((r: any) => { jobCountMap[r.job_id] = (jobCountMap[r.job_id] || 0) + 1; });
+        const applicantsByJob = (r6.data || [])
+            .map((j: any) => ({ job_id: j.id, job_title: j.title, count: jobCountMap[j.id] || 0 }))
+            .sort((a: any, b: any) => b.count - a.count)
+            .slice(0, 10);
+
         res.json({
-            totalJobs: totalJobs || 0, openJobs: openJobs || 0,
-            totalApplicants: totalApplicants || 0, recentApplicants: 0, scheduledInterviews: 0,
-            applicantsByStage: byStage || [], applicantsByJob: byJob || [],
+            totalJobs: r1.count || 0,
+            openJobs: r2.count || 0,
+            totalApplicants: r3.count || 0,
+            recentApplicants: r3.count || 0,
+            scheduledInterviews: r4.count || 0,
+            applicantsByStage,
+            applicantsByJob,
         });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
+
 
 api.get('/analytics/applicants-by-stage', async (_req: any, res: any) => {
     try {
