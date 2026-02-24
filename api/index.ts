@@ -277,7 +277,7 @@ api.post('/applicants/:id/offer-response', async (req: any, res: any) => {
 // ══════════════════════════════════════════════════════════════════════════════
 api.get('/interviews', async (req: any, res: any) => {
     try {
-        const { applicant_id, job_id, status } = req.query;
+        const { applicant_id, job_id, status, applicant_email } = req.query;
         const rows = await sql(`
       SELECT i.*, a.first_name||' '||a.last_name as applicant_name, a.email as applicant_email, j.title as job_title
       FROM interviews i
@@ -287,6 +287,7 @@ api.get('/interviews', async (req: any, res: any) => {
       ${applicant_id ? `AND i.applicant_id='${applicant_id}'` : ''}
       ${job_id ? `AND i.job_id='${job_id}'` : ''}
       ${status ? `AND i.status='${status}'` : ''}
+      ${applicant_email ? `AND a.email ILIKE '%${applicant_email}%'` : ''}
       ORDER BY i.scheduled_at ASC`);
         res.json(rows);
     } catch (e: any) { res.status(500).json({ error: e.message }); }

@@ -21,6 +21,7 @@ export default function CandidateDashboard() {
     const { user } = useAuth();
     // State for real data
     const [myApplications, setMyApplications] = useState<Application[]>([]);
+    const [interviewsCount, setInterviewsCount] = useState(0);
     const [loading, setLoading] = useState(true);
 
     // Modal State
@@ -42,19 +43,23 @@ export default function CandidateDashboard() {
     };
 
     useEffect(() => {
-        loadApplications();
-        const interval = setInterval(loadApplications, 3000); // Poll every 3 seconds
+        loadData();
+        const interval = setInterval(loadData, 3000); // Poll every 3 seconds
         return () => clearInterval(interval);
     }, [user.email]);
 
-    const loadApplications = async () => {
+    const loadData = async () => {
         if (!user.email) return;
 
         try {
-            // Fetch applications filtered by current user's email
-            const response = await applicantsApi.getAll({ email: user.email! });
+            const { interviewsApi } = await import('../services/api');
+            // Fetch applications and interviews in parallel
+            const [appResponse, intResponse] = await Promise.all([
+                applicantsApi.getAll({ email: user.email }),
+                interviewsApi.getAll({ applicant_email: user.email })
+            ]);
 
-            const mappedApps = response.data
+            const mappedApps = appResponse.data
                 .map((app: any) => ({
                     id: app.id,
                     jobId: app.job_id,
@@ -67,8 +72,9 @@ export default function CandidateDashboard() {
                 }));
 
             setMyApplications(mappedApps);
+            setInterviewsCount((intResponse.data || []).length);
         } catch (error) {
-            console.error("Failed to load applications", error);
+            console.error("Failed to load dashboard data", error);
         } finally {
             setLoading(false);
         }
@@ -77,7 +83,7 @@ export default function CandidateDashboard() {
 
     const stats = [
         { label: 'Applications', value: myApplications.length, icon: Briefcase, color: '#3b82f6' },
-        { label: 'Interviews', value: myApplications.filter(a => a.stage === 'interview').length, icon: Clock, color: '#f59e0b' },
+        { label: 'Interviews', value: interviewsCount, icon: Clock, color: '#f59e0b' },
         { label: 'Offers', value: myApplications.filter(a => a.offerStatus === 'pending').length, icon: CheckCircle, color: '#10b981' },
     ];
 

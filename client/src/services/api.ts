@@ -37,7 +37,7 @@ export const applicantsApi = {
 
 // Interviews API
 export const interviewsApi = {
-  getAll: (params?: { applicant_id?: string; job_id?: string; status?: string }) =>
+  getAll: (params?: { applicant_id?: string; job_id?: string; status?: string; applicant_email?: string }) =>
     api.get('/interviews', { params }),
   getById: (id: string) => api.get(`/interviews/${id}`),
   create: (data: any) => api.post('/interviews', data),
