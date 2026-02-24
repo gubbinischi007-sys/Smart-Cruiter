@@ -520,9 +520,10 @@ api.post('/emails/bulk-acceptance', async (req: any, res: any) => {
         const result = await sendBulkEmails(mapped, 'acceptance', (a) => ({
             subject: `Congratulations! You've been accepted for ${a.job_title}`,
             html: `<h2>Congratulations ${a.first_name}!</h2>
-                   <p>We are pleased to inform you that you have been accepted for the position of <strong>${a.job_title}</strong>.</p>
-                   <p>Our HR team will be in touch with you shortly regarding next steps.</p>
-                   <p>Best regards,<br>Smart-Cruiter Team</p>`
+                   <p>We are pleased to inform you that you have been accepted for the position of <strong>${a.job_title}</strong> at Smart-Cruiter Inc.</p>
+                   <p>Our HR team will be in touch with you shortly regarding the next steps in your onboarding process.</p>
+                   Best regards,
+                   The Smart-Cruiter Team`
         }));
         res.json({ message: `Sent ${result.successful} acceptance emails`, ...result });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -539,9 +540,11 @@ api.post('/emails/bulk-rejection', async (req: any, res: any) => {
         const result = await sendBulkEmails(mapped, 'rejection', (a) => ({
             subject: `Application Update: ${a.job_title}`,
             html: `<h2>Thank you for your interest, ${a.first_name}</h2>
-                   <p>We appreciate you taking the time to apply for the position of <strong>${a.job_title}</strong>.</p>
-                   <p>After careful consideration, we have decided to move forward with other candidates. We encourage you to apply for future opportunities that match your skills and experience.</p>
-                   <p>Best regards,<br>Smart-Cruiter Team</p>`
+                   <p>We appreciate you taking the time to apply and interview for the <strong>${a.job_title}</strong> position at Smart-Cruiter Inc.</p>
+                   <p>After careful consideration of your qualifications and experience, we have decided to move forward with another candidate for this role.</p>
+                   <p>We encourage you to apply for future opportunities that match your skills and experience.</p>
+                   Best regards,
+                   The Smart-Cruiter Team`
         }));
         res.json({ message: `Sent ${result.successful} rejection emails`, ...result });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -556,13 +559,13 @@ api.post('/emails/duplicate-warning', async (req: any, res: any) => {
         const unique = Array.from(new Map((applicants || []).map((item: any) => [item.email, item])).values());
 
         const result = await sendBulkEmails(unique, 'duplicate_warning', (a: any) => ({
-            subject: `WARNING: Duplicate Applications Detected`,
+            subject: `Action Required: Duplicate Applications Detected`,
             html: `<h2>Hello ${a.first_name},</h2>
-                   <p>We noticed that you have submitted multiple applications to our system. This is a violation of our application policy.</p>
-                   <p style="color: red; font-weight: bold;">Please do not repeat this again.</p>
-                   <p><strong>If you continue to submit duplicate applications, you will be added to our blacklist and barred from future opportunities.</strong></p>
-                   <p>We have merged your duplicate profiles into a single record for now.</p>
-                   <p>Regards,<br>Smart-Cruiter Compliance Team</p>`
+                   <p>During a routine check, we noticed that you have submitted multiple applications utilizing the same profile information. This violates our application policy.</p>
+                   <p>We have consolidated your duplicate profiles into a single record to ensure a fair process for all candidates.</p>
+                   <p style="color: #ef4444; font-weight: bold;">Please refrain from submitting redundant applications, as repeated occurrences may impact your standing for future opportunities.</p>
+                   Best regards,
+                   The Smart-Cruiter Compliance Team`
         }));
         res.json({ message: `Sent ${result.successful} warnings`, ...result });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -577,17 +580,19 @@ api.post('/emails/identity-warning', async (req: any, res: any) => {
         const mapped = (applicants || []).map((a: any) => ({ ...a, job_title: a.jobs?.title }));
 
         const result = await sendBulkEmails(mapped, 'identity_warning', (a: any) => ({
-            subject: `URGENT: Resume Identity Verification Required`,
+            subject: `Action Required: Resume Identity Verification`,
             html: `<div style="font-family: sans-serif; padding: 20px; border: 1px solid #ef4444; border-radius: 8px;">
-                     <h2 style="color: #ef4444;">Identity Mismatch Detected</h2>
+                     <h2 style="color: #ef4444;">Identity Verification Notice</h2>
                      <p>Hello <strong>${a.first_name}</strong>,</p>
-                     <p>During our automated screening process, we detected that the resume you uploaded for the <strong>${a.job_title}</strong> position appears to belong to another individual or contains conflicting identity information.</p>
+                     <p>During our automated screening process, we detected a potential discrepancy regarding the resume you uploaded for the <strong>${a.job_title}</strong> position.</p>
                      <p style="background: #fee2e2; padding: 10px; border-radius: 4px; color: #b91c1c;">
-                       <strong>Issue:</strong> The name on the uploaded resume document does not match the name on your application profile.
+                       <strong>Notice:</strong> The name found on the uploaded document does not appear to match the name registered on your application profile.
                      </p>
-                     <p>Please log in to your portal and re-upload the correct document immediately to avoid disqualification from this and future roles.</p>
-                     <p>If you believe this is an error, please contact our support team.</p>
-                     <p>Regards,<br>Smart-Cruiter Security Team</p>
+                     <p>To avoid potential disqualification and ensure the integrity of your application, please log into your portal and upload the correct document immediately.</p>
+                     <p>If you believe this notice was sent in error, please reach out to our support team for assistance.</p>
+                     <br>
+                     Best regards,
+                     The Smart-Cruiter Security Team
                    </div>`
         }));
         res.json({ message: `Sent ${result.successful} warnings`, ...result });
