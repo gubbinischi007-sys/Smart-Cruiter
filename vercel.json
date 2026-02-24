@@ -1,25 +1,6 @@
 {
-    "version": 2,
-    "builds": [
-        {
-            "src": "api/index.ts",
-            "use": "@vercel/node",
-            "config": {
-                "includeFiles": [
-                    "server/src/**",
-                    "server/package.json",
-                    "server/node_modules/**"
-                ]
-            }
-        },
-        {
-            "src": "package.json",
-            "use": "@vercel/static-build",
-            "config": {
-                "distDir": "client/dist"
-            }
-        }
-    ],
+    "buildCommand": "npm run build",
+    "outputDirectory": "client/dist",
     "rewrites": [
         {
             "source": "/api/(.*)",
@@ -29,8 +10,5 @@
             "source": "/((?!api).*)",
             "destination": "/index.html"
         }
-    ],
-    "env": {
-        "NODE_ENV": "production"
-    }
+    ]
 }

@@ -1,7 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { run, get, all } from '../database.js';
-import { Interview, CreateInterviewInput, UpdateInterviewInput } from '../models/interview.js';
+import { run, get, all } from '../database';
+import { Interview, CreateInterviewInput, UpdateInterviewInput } from '../models/interview';
 
 const router = express.Router();
 
