@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { analyticsApi, applicantsApi, interviewsApi, historyApi, employeesApi } from '../services/api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { Briefcase, Users, UserCheck, Calendar, TrendingUp, Plus, ArrowRight, Brain, CheckCircle, Copy, History, AlertTriangle, ShieldCheck, Download, FileText, FileSpreadsheet, UserMinus, GitMerge } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import './Dashboard.css';
@@ -487,16 +487,50 @@ export default function Dashboard() {
           </h2>
           <div style={{ height: '300px', width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.applicantsByJob} layout="vertical" margin={{ left: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={true} vertical={false} />
-                <XAxis type="number" hide />
-                <YAxis dataKey="job_title" type="category" width={100} tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <Tooltip
-                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{ background: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
-                  itemStyle={{ color: '#fff' }}
+              <BarChart
+                data={stats.applicantsByJob}
+                layout="vertical"
+                margin={{ left: 10, right: 40, top: 8, bottom: 8 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} vertical={true} />
+                <XAxis
+                  type="number"
+                  tick={{ fill: '#64748b', fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
                 />
-                <Bar dataKey="count" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={20} />
+                <YAxis
+                  dataKey="job_title"
+                  type="category"
+                  width={130}
+                  tick={{ fill: '#94a3b8', fontSize: 12 }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                  contentStyle={{
+                    background: 'rgba(15, 23, 42, 0.95)',
+                    border: '1px solid rgba(99,102,241,0.3)',
+                    borderRadius: '10px',
+                    padding: '10px 16px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+                  }}
+                  labelStyle={{ color: '#c7d2fe', fontWeight: 600, marginBottom: '4px' }}
+                  itemStyle={{ color: '#a5b4fc' }}
+                  formatter={(value: any) => [`${value} applicants`, 'Count']}
+                />
+                <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={22}>
+                  {stats.applicantsByJob.map((_entry, index) => {
+                    const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#06b6d4', '#10b981', '#f59e0b'];
+                    return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                  })}
+                  <LabelList
+                    dataKey="count"
+                    position="right"
+                    style={{ fill: '#94a3b8', fontSize: 12, fontWeight: 600 }}
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>

@@ -485,9 +485,11 @@ export default function JobDetail() {
                 <label>Date & Time *</label>
                 <input
                   type="datetime-local"
+                  id="interview-date-job"
                   value={interviewForm.scheduled_at}
                   onChange={(e) => setInterviewForm({ ...interviewForm, scheduled_at: e.target.value })}
                   required
+                  style={{ width: '100%' }}
                 />
               </div>
               <div className="form-group" style={{ marginBottom: '1rem' }}>

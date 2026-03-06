@@ -79,7 +79,7 @@ export default function ApplicationStatus() {
     );
 
     const isHired = application.stage === 'hired';
-    const isRejected = application.stage === 'declined' || application.stage === 'withdrawn';
+    const isRejected = application.stage === 'declined' || application.stage === 'withdrawn' || application.stage === 'rejected';
 
     return (
         <div className="status-page animate-fade-in">

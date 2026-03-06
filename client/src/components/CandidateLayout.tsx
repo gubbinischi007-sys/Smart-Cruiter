@@ -12,6 +12,7 @@ export default function CandidateLayout() {
     const navLinks = [
         { path: '/candidate/jobs', label: 'Browse Jobs', icon: Briefcase },
         { path: '/candidate/dashboard', label: 'My Applications', icon: User },
+        { path: '/candidate/interviews', label: 'My Interviews', icon: Briefcase }, // using an icon, maybe Calendar
         { path: '/candidate/emails', label: 'Inbox', icon: Mail, badge: unreadCount },
     ];
 

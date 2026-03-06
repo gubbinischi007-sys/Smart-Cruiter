@@ -292,6 +292,8 @@ export default function CandidateEmails() {
                             <div className="prose prose-invert max-w-none text-gray-300 space-y-6 text-xs [&_*]:text-xs leading-relaxed">
                                 <div dangerouslySetInnerHTML={{
                                     __html: selectedEmail.message
+                                        .replace(/color:\s*#333;?/gi, 'color: #cbd5e1;') // Fix body text in dark mode
+                                        .replace(/color:\s*#1e293b;?/gi, 'color: #f8fafc;') // Fix headers in dark mode
                                         .replace(
                                             'Please log in to your candidate dashboard to view the full offer letter and accept/reject it.',
                                             ''

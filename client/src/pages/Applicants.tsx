@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { applicantsApi, jobsApi, emailApi, historyApi } from '../services/api';
 import { logAction } from '../utils/historyLogger';
-import { XCircle, CheckCircle, User, Briefcase, Copy, GitMerge, Info, AlertTriangle, X, ShieldAlert, Mail } from 'lucide-react';
+import { XCircle, CheckCircle, User, Briefcase, Copy, GitMerge, Info, AlertTriangle, X, ShieldAlert, Mail, Search } from 'lucide-react';
 import './Applicants.css';
+import MatchScoreModal from '../components/MatchScoreModal';
 
 interface Applicant {
   id: string;
@@ -31,8 +32,8 @@ export default function Applicants() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filters, setFilters] = useState({
     job_id: '',
-    stage: '',
-    status: '',
+    stage: 'All',
+    search: '',
   });
 
   const [confirmationModal, setConfirmationModal] = useState<{
@@ -44,6 +45,8 @@ export default function Applicants() {
     type: null,
     reason: ''
   });
+
+  const [matchScoreModal, setMatchScoreModal] = useState<{ isOpen: boolean, score: number, applicantName: string, candidateId: string, jobId: string } | null>(null);
 
   const addNotification = (type: 'success' | 'error' | 'info', message: string) => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -74,8 +77,6 @@ export default function Applicants() {
     try {
       const params: any = {};
       if (filters.job_id) params.job_id = filters.job_id;
-      if (filters.stage) params.stage = filters.stage;
-      if (filters.status) params.status = filters.status;
 
       const response = await applicantsApi.getAll(params);
       setApplicants(response.data);
@@ -88,7 +89,14 @@ export default function Applicants() {
 
   const handleStageChange = async (applicantId: string, newStage: string) => {
     try {
-      await applicantsApi.update(applicantId, { stage: newStage });
+      let rejectionReason = undefined;
+      if (newStage === 'rejected' || newStage === 'declined') {
+        const promptResult = window.prompt("Please provide a reason for rejection (this will be sent to the candidate):");
+        if (promptResult === null) return; // user cancelled
+        rejectionReason = promptResult;
+      }
+
+      await applicantsApi.update(applicantId, { stage: newStage, rejection_reason: rejectionReason });
       loadApplicants();
     } catch (error) {
       console.error('Failed to update applicant stage:', error);
@@ -100,6 +108,7 @@ export default function Applicants() {
     switch (stage.toLowerCase()) {
       case 'hired': return '%2334d399'; // emerald-400
       case 'declined': return '%23fb7185'; // rose-400
+      case 'rejected': return '%23f472b6'; // pink-400
       case 'shortlisted': return '%23a78bfa'; // violet-400
       case 'recommended': return '%23fbbf24'; // amber-400
       case 'withdrawn': return '%2394a3b8'; // slate-400
@@ -250,6 +259,23 @@ export default function Applicants() {
       </div>
     );
   }
+
+  const displayedApplicants = applicants.filter(a => {
+    // Stage Filter
+    if (filters.stage && filters.stage !== 'All' && a.stage.toLowerCase() !== filters.stage.toLowerCase()) {
+      return false;
+    }
+    // Search Filter
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      const inName = `${a.first_name} ${a.last_name}`.toLowerCase().includes(q);
+      const inEmail = a.email.toLowerCase().includes(q);
+      const inJob = a.job_title?.toLowerCase().includes(q);
+      if (!inName && !inEmail && !inJob) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="animate-fade-in relative">
       {/* Standard Enterprise Confirmation Modal */}
@@ -307,60 +333,63 @@ export default function Applicants() {
       )}
 
 
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold mb-2 text-gradient">Applicants</h1>
-          <p className="text-muted">Manage and track candidate progress.</p>
-        </div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-white flex items-center">
+          Applicants
+          <span className="text-muted text-xl font-normal ml-2">({displayedApplicants.length})</span>
+        </h1>
       </div>
 
-      <div className="card mb-6 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="form-group mb-0">
-            <label className="text-xs uppercase font-bold text-muted mb-2 block">Job Position</label>
-            <div className="relative">
-              <select
-                value={filters.job_id}
-                onChange={(e) => setFilters({ ...filters, job_id: e.target.value })}
-                className="w-full bg-[#1e293b80] border border-[#ffffff10] rounded-lg p-2 text-white appearance-none focus:outline-none focus:border-primary"
-              >
-                <option value="">All Jobs</option>
-                {jobs.map((job) => (
-                  <option key={job.id} value={job.id}>{job.title}</option>
-                ))}
-              </select>
+      <div className="jobs-toolbar" style={{ marginBottom: '2rem' }}>
+        <div className="filter-group">
+          {['All', 'Applied', 'Shortlisted', 'Recommended', 'Hired', 'Declined'].map((stage) => (
+            <button
+              key={stage}
+              className={`filter-btn ${filters.stage === stage ? 'active' : ''}`}
+              onClick={() => setFilters({ ...filters, stage })}
+            >
+              {stage}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <div className="relative" style={{ minWidth: '180px' }}>
+            <select
+              value={filters.job_id}
+              onChange={(e) => setFilters({ ...filters, job_id: e.target.value })}
+              style={{
+                width: '100%',
+                background: 'rgba(15, 23, 42, 0.4)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '9999px',
+                padding: '0.4rem 2rem 0.4rem 1rem',
+                color: 'white',
+                appearance: 'none',
+                fontSize: '0.875rem',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              <option value="" style={{ background: '#0f172a' }}>All Jobs</option>
+              {jobs.map((job) => (
+                <option key={job.id} value={job.id} style={{ background: '#0f172a' }}>{job.title}</option>
+              ))}
+            </select>
+            <div style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94a3b8' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </div>
           </div>
 
-          <div className="form-group mb-0">
-            <label className="text-xs uppercase font-bold text-muted mb-2 block">Stage</label>
-            <div className="relative">
-              <select
-                value={filters.stage}
-                onChange={(e) => setFilters({ ...filters, stage: e.target.value })}
-                className="w-full bg-[#1e293b80] border border-[#ffffff10] rounded-lg p-2 text-white appearance-none focus:outline-none focus:border-primary"
-              >
-                <option value="">All Stages</option>
-                {['Applied', 'Shortlisted', 'Recommended', 'Hired', 'Declined', 'Withdrawn'].map(s => (
-                  <option key={s.toLowerCase()} value={s.toLowerCase()}>{s}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="form-group mb-0">
-            <label className="text-xs uppercase font-bold text-muted mb-2 block">Status</label>
-            <div className="relative">
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                className="w-full bg-[#1e293b80] border border-[#ffffff10] rounded-lg p-2 text-white appearance-none focus:outline-none focus:border-primary"
-              >
-                <option value="">All</option>
-                <option value="active">Active</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
+          <div className="search-wrapper-jobs" style={{ width: '220px' }}>
+            <Search className="search-icon-left" size={16} />
+            <input
+              type="text"
+              placeholder="Search..."
+              className="search-input-premium"
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            />
           </div>
         </div>
       </div>
@@ -392,9 +421,9 @@ export default function Applicants() {
                 <input
                   type="checkbox"
                   className="rounded border-gray-600 bg-transparent"
-                  checked={selectedApplicants.size === applicants.length && applicants.length > 0}
+                  checked={selectedApplicants.size === displayedApplicants.length && displayedApplicants.length > 0}
                   onChange={(e) => {
-                    if (e.target.checked) setSelectedApplicants(new Set(applicants.map((a) => a.id)));
+                    if (e.target.checked) setSelectedApplicants(new Set(displayedApplicants.map((a) => a.id)));
                     else setSelectedApplicants(new Set());
                   }}
                 />
@@ -409,17 +438,16 @@ export default function Applicants() {
             </tr>
           </thead>
           <tbody>
-            {applicants.length === 0 ? (
+            {displayedApplicants.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-muted">
-                  <div className="flex flex-col items-center">
-                    <User size={48} className="mb-4 opacity-20" />
-                    <p>No applicants found matching your filters.</p>
+                <td colSpan={8} className="text-center py-20 text-muted">
+                  <div className="flex flex-col items-center justify-center">
+                    <p className="text-[#64748b] text-base">No applicants found</p>
                   </div>
                 </td>
               </tr>
             ) : (
-              applicants.map((applicant) => (
+              displayedApplicants.map((applicant) => (
                 <tr key={applicant.id} className="hover:bg-[#ffffff05] transition-colors">
                   <td className="text-center">
                     <input
@@ -482,7 +510,7 @@ export default function Applicants() {
                         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='${getChevronColor(applicant.stage)}' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`
                       }}
                     >
-                      {['Applied', 'Shortlisted', 'Recommended', 'Hired', 'Declined', 'Withdrawn'].map(s => (
+                      {['Applied', 'Shortlisted', 'Recommended', 'Hired', 'Declined', 'Withdrawn', 'Rejected'].map(s => (
                         <option key={s.toLowerCase()} value={s.toLowerCase()}>{s}</option>
                       ))}
                     </select>
@@ -525,19 +553,73 @@ export default function Applicants() {
                         return otherParts.some(p => p.length >= 3 && resumeUrlLower.includes(p));
                       });
 
+                      // Pre-calculate Dynamic Score so it can be passed to the modal for ALL states
+                      let score = 0;
+
+                      const job = jobs.find(j => String(j.id) === String(applicant.job_id));
+                      const jdText = job ? `${job.title || ''} ${job.requirements || job.description || ''}`.toLowerCase().replace(/[^a-z\s]/g, ' ') : '';
+                      const stopWords = new Set([
+                        'the', 'and', 'to', 'of', 'in', 'for', 'with', 'on', 'is', 'as', 'at', 'by', 'an', 'be', 'this', 'that', 'are', 'from', 'or', 'have', 'has', 'will', 'you', 'your', 'we', 'our', 'it', 'can', 'all', 'more', 'their', 'which', 'about', 'what', 'how', 'when', 'where', 'who', 'not', 'but', 'so', 'if', 'then', 'than', 'such', 'into', 'out', 'up', 'down', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'some', 'any', 'both', 'each', 'few', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'too', 'very',
+                        'job', 'role', 'team', 'work', 'company', 'experience', 'skills', 'looking', 'years', 'working', 'using', 'ability', 'knowledge', 'strong', 'good', 'excellent',
+                        'responsible', 'developing', 'maintaining', 'building', 'creating', 'testing', 'writing', 'managing', 'leading', 'supporting', 'understanding', 'ensure', 'ensuring', 'provide', 'providing', 'required', 'requirements', 'including',
+                        'design', 'designing', 'development', 'software', 'applications', 'systems', 'business', 'data', 'technical', 'technology', 'environment', 'project', 'projects', 'solutions', 'process', 'processes', 'management', 'client', 'clients', 'user', 'users', 'product', 'products', 'service', 'services', 'support', 'performance', 'quality', 'best', 'practices', 'drive', 'driving', 'within', 'across', 'highly', 'related', 'field', 'degree', 'computer', 'science', 'engineering', 'bachelor', 'master', 'equivalent',
+                        'must', 'plus', 'preferred', 'solid', 'proven', 'track', 'record', 'familiarity', 'proficient', 'proficiency', 'hands-on', 'position', 'opportunity', 'culture', 'benefits', 'salary', 'compensation', 'remote', 'flexible', 'office', 'join', 'hire', 'hiring', 'candidate', 'successful', 'ideal', 'passionate', 'driven', 'motivated', 'self-starter', 'fast-paced', 'dynamic', 'innovative', 'cutting-edge', 'industry', 'collaborating', 'cross', 'functional', 'teams'
+                      ]);
+                      const words = jdText.split(/\s+/);
+                      const keywordCounts: Record<string, number> = {};
+                      words.forEach(w => {
+                        if (w.length > 3 && !stopWords.has(w)) {
+                          keywordCounts[w] = (keywordCounts[w] || 0) + 1;
+                        }
+                      });
+                      const jdKeywords = Object.entries(keywordCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+                      // Use real stored resume text if available, otherwise simulated fallback
+                      const storedResumeText = ((applicant as any).resume_text || '').toLowerCase();
+                      const simulatedText = applicant.resume_url ? 'university bachelor degree experience intern pu school career team worked' : '';
+                      const bodyText = storedResumeText.length > 20 ? storedResumeText : simulatedText;
+                      const applicantText = `${applicant.job_title || ''} ${applicant.first_name || ''} ${applicant.resume_url || ''} ${(applicant as any).cover_letter || ''} ${bodyText}`.toLowerCase();
+                      const missingSkills = jdKeywords.filter(kw => !applicantText.includes(kw));
+
+                      const hasEducation = ['school', 'pu', 'pre university', 'ug', 'pg', 'bachelor', 'master', 'degree', 'diploma', 'university'].some(term => applicantText.includes(term));
+                      const hasExperience = ['experience', 'intern', 'years', 'worked', 'career'].some(term => applicantText.includes(term));
+
+                      if (isLocalOwner) {
+                        if (jdKeywords.length > 0) {
+                          const matchRatio = (jdKeywords.length - missingSkills.length) / jdKeywords.length;
+                          score = Math.round(100 * matchRatio);
+                          if (hasEducation) score += 15;
+                          if (hasExperience) score += 15;
+                          score = Math.min(score, 100);
+                        } else {
+                          score = 100;
+                        }
+                      } else {
+                        score = 0; // Disqualified due to mismatch
+                      }
+
+                      const openModal = () => {
+                        const cleanName = (n: string) => {
+                          if (!n) return '';
+                          let name = n.trim().toLowerCase();
+                          if (name.match(/^([a-z])\1/)) name = name.substring(1);
+                          return name.charAt(0).toUpperCase() + name.slice(1);
+                        };
+                        setMatchScoreModal({ isOpen: true, score, applicantName: `${cleanName(applicant.first_name)} ${cleanName(applicant.last_name)}`, candidateId: applicant.id, jobId: applicant.job_id });
+                      };
+
                       // 4. Reporting Hierarchy
 
                       // CASE A: Someone else is the owner, this user is likely incorrect (Mismatch)
                       if (existsBetterOwner && !isLocalOwner) {
                         return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
+                          <div onClick={openModal} className="cursor-pointer group hover:opacity-80 transition-opacity" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
                             <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.1)' }}>!</div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Conflict</span>
                               <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>Identity Mismatch</span>
                             </div>
                             <button
-                              onClick={() => sendIdentityWarning(applicant.id, applicant.first_name)}
+                              onClick={(e) => { e.stopPropagation(); sendIdentityWarning(applicant.id, applicant.first_name); }}
                               title="Send Identity Warning"
                               style={{
                                 marginLeft: 'auto',
@@ -555,13 +637,10 @@ export default function Applicants() {
                         );
                       }
 
-                      // CASE B: Multiple people using the same resume, but this user IS the owner
-                      // We show the score but with a "Verified Owner" status
-
                       // CASE C: General Conflict (Duplicate file, no clear owner via name matching)
                       if (othersUsingSameResume.length > 0 && !isLocalOwner && !existsBetterOwner) {
                         return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
+                          <div onClick={openModal} className="cursor-pointer group hover:opacity-80 transition-opacity" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
                             <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold' }}>!</div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Duplicate</span>
@@ -574,14 +653,14 @@ export default function Applicants() {
                       // CASE D: Ownership status check - Name mismatch (Red Error)
                       if (!isLocalOwner) {
                         return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
+                          <div onClick={openModal} className="cursor-pointer group hover:opacity-80 transition-opacity" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
                             <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.1)' }}>!</div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Conflict</span>
                               <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>Identity Mismatch</span>
                             </div>
                             <button
-                              onClick={() => sendIdentityWarning(applicant.id, applicant.first_name)}
+                              onClick={(e) => { e.stopPropagation(); sendIdentityWarning(applicant.id, applicant.first_name); }}
                               title="Send Identity Warning"
                               style={{
                                 marginLeft: 'auto',
@@ -599,21 +678,14 @@ export default function Applicants() {
                         );
                       }
 
-                      // Final Score Calculation for Verified or Owner cases
-                      let score = 40; // Base score for having a valid resume
-
-                      // 1. Identity Bonus (Verified Owner)
-                      if (isLocalOwner) score += 20;
-
-                      // 2. Job Title Match (Search keywords from job title in URL)
-                      const jobKeywords = (applicant.job_title || '').toLowerCase().split(' ').filter(k => k.length > 2 && k !== 'coordinator' && k !== 'specialist');
-                      const matchedJobKeywords = jobKeywords.filter(k => resumeUrlLower.includes(k));
-                      score += (matchedJobKeywords.length * 10);
-
-                      // CASE E: Job Role Mismatch (Yellow Warning if identity is verified but job relevance is zero)
-                      if (matchedJobKeywords.length === 0 && isLocalOwner) {
+                      // CASE E: Job Role Mismatch (Yellow Warning if identity is verified but literally absolute 0 match)
+                      if (jdKeywords.length > 0 && missingSkills.length === jdKeywords.length && isLocalOwner) {
                         return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b' }}>
+                          <div
+                            className="cursor-pointer group hover:opacity-80 transition-opacity"
+                            onClick={openModal}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b' }}
+                          >
                             <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(245, 158, 11, 0.1)' }}>?</div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Review Needed</span>
@@ -623,25 +695,30 @@ export default function Applicants() {
                         );
                       }
 
-                      // 3. Professional Skill Keywords Bonus
-                      const skills = ['senior', 'lead', 'expert', 'specialist', 'manager', 'engineer', 'developer', 'analyst', 'coordinator', 'professional', 'experienced'];
-                      const matchedSkills = skills.filter(s => resumeUrlLower.includes(s));
-                      score += (matchedSkills.length * 5);
-
-                      // 4. Random variation for realism (within 5 percentage points)
-                      const seed = applicant.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-                      score += (seed % 6);
-
-                      // Cap score at 98% (rarely 100% automated match)
-                      score = Math.min(score, 98);
-
                       let color = '#ef4444';
-                      if (score >= 90) color = '#10b981';
-                      else if (score >= 80) color = '#8b5cf6';
-                      else if (score >= 70) color = '#f59e0b';
+                      let statusText = 'Poor Match';
+                      let StatusIcon = XCircle;
+
+                      if (score >= 80) {
+                        color = '#10b981'; // Green
+                        statusText = 'Verified';
+                        StatusIcon = CheckCircle;
+                      } else if (score >= 50) {
+                        color = '#f59e0b'; // Yellow
+                        statusText = 'Review Needed';
+                        StatusIcon = AlertTriangle;
+                      } else {
+                        color = '#ef4444'; // Red
+                        statusText = 'Poor Match';
+                        StatusIcon = XCircle;
+                      }
 
                       return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div
+                          className="cursor-pointer group hover:opacity-80 transition-opacity"
+                          onClick={openModal}
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                        >
                           <div style={{
                             width: '32px',
                             height: '32px',
@@ -659,8 +736,8 @@ export default function Applicants() {
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
                             <span style={{ fontSize: '0.75rem', color: color, fontWeight: 'bold' }}>{score}% Match</span>
-                            <span style={{ fontSize: '0.6rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                              <CheckCircle size={8} /> Verified
+                            <span style={{ fontSize: '0.6rem', color: color, display: 'flex', alignItems: 'center', gap: '2px' }}>
+                              <StatusIcon size={8} /> {statusText}
                             </span>
                           </div>
                         </div>
@@ -668,7 +745,26 @@ export default function Applicants() {
                     })()}
                   </td>
                   <td>
-                    <Link to={`/admin/applicants/${applicant.id}`} className="btn btn-sm btn-secondary">
+                    <Link
+                      to={`/admin/applicants/${applicant.id}`}
+                      className="px-4 py-1.5 text-xs font-semibold rounded transition-all duration-200 inline-block"
+                      style={{
+                        background: 'rgba(30, 27, 75, 0.6)',
+                        border: '1px solid rgba(99, 102, 241, 0.4)',
+                        color: '#c7d2fe',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(49, 46, 129, 0.8)';
+                        e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.8)';
+                        e.currentTarget.style.color = '#ffffff';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(30, 27, 75, 0.6)';
+                        e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+                        e.currentTarget.style.color = '#c7d2fe';
+                      }}
+                    >
                       View Profile
                     </Link>
                   </td>
@@ -698,6 +794,17 @@ export default function Applicants() {
           </div>
         ))}
       </div>
+
+      {matchScoreModal && (
+        <MatchScoreModal
+          isOpen={matchScoreModal.isOpen}
+          score={matchScoreModal.score}
+          applicantName={matchScoreModal.applicantName}
+          candidateId={matchScoreModal.candidateId}
+          jobId={matchScoreModal.jobId}
+          onClose={() => setMatchScoreModal(null)}
+        />
+      )}
     </div>
   );
 }

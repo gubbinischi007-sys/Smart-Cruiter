@@ -282,45 +282,83 @@
 
 /* Actions */
 .action-btn {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
-    border: none;
+    border-radius: 7px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
     cursor: pointer;
-    background: rgba(255, 255, 255, 0.03);
-    color: #94a3b8;
+    background: rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
     transition: all 0.2s;
     flex-shrink: 0;
+    text-decoration: none;
+}
+
+/* Ensure SVG icons inside action buttons are always displayed */
+.action-btn svg {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.action-btn svg * {
+    visibility: visible !important;
 }
 
 .action-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
     transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* Hover Colors */
+.action-btn:hover svg {
+    color: #ffffff !important;
+}
+
+/* View - indigo hover */
 .action-btn:nth-child(1):hover {
-    color: #818cf8;
-    background: rgba(99, 102, 241, 0.15);
+    color: #c7d2fe;
+    background: rgba(99, 102, 241, 0.3);
+    border-color: rgba(99, 102, 241, 0.6);
 }
 
-/* View */
+.action-btn:nth-child(1):hover svg {
+    color: #c7d2fe !important;
+}
+
+/* Edit - sky hover */
 .action-btn:nth-child(2):hover {
-    color: #38bdf8;
-    background: rgba(56, 189, 248, 0.15);
+    color: #bae6fd;
+    background: rgba(56, 189, 248, 0.25);
+    border-color: rgba(56, 189, 248, 0.6);
 }
 
-/* Edit */
-.action-btn:nth-child(3):hover {
-    color: #f87171;
-    background: rgba(248, 113, 113, 0.15);
+.action-btn:nth-child(2):hover svg {
+    color: #bae6fd !important;
 }
 
-/* Delete */
+/* Delete button - always red-tinted */
+.action-btn.delete {
+    border-color: rgba(248, 113, 113, 0.5);
+    background: rgba(248, 113, 113, 0.18);
+    color: #fca5a5;
+}
+
+.action-btn.delete:hover {
+    color: #ffffff;
+    background: rgba(248, 113, 113, 0.35);
+    border-color: rgba(248, 113, 113, 0.7);
+    box-shadow: 0 2px 8px rgba(248, 113, 113, 0.3);
+}
+
+.action-btn.delete:hover svg {
+    color: #ffffff !important;
+}
 
 .jobs-empty-state {
     text-align: center;

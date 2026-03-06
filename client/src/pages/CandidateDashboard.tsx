@@ -173,7 +173,13 @@ export default function CandidateDashboard() {
                                         <button
                                             onClick={() => handleWithdrawClick(app.id)}
                                             className="btn btn-sm btn-danger-outline"
-                                            style={{ borderColor: '#ef4444', color: '#ef4444' }}
+                                            style={{
+                                                borderColor: ['rejected', 'declined', 'hired', 'withdrawn'].includes(app.stage.toLowerCase()) ? '#4b5563' : '#ef4444',
+                                                color: ['rejected', 'declined', 'hired', 'withdrawn'].includes(app.stage.toLowerCase()) ? '#9ca3af' : '#ef4444',
+                                                cursor: ['rejected', 'declined', 'hired', 'withdrawn'].includes(app.stage.toLowerCase()) ? 'not-allowed' : 'pointer',
+                                                opacity: ['rejected', 'declined', 'hired', 'withdrawn'].includes(app.stage.toLowerCase()) ? 0.5 : 1
+                                            }}
+                                            disabled={['rejected', 'declined', 'hired', 'withdrawn'].includes(app.stage.toLowerCase())}
                                         >
                                             Withdraw
                                         </button>

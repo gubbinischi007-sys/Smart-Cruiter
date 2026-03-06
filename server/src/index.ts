@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { initDatabase } from './database.js';
+import { startReminderCron } from './services/reminderCron.js';
 import { jobRoutes } from './routes/jobs.js';
 import { applicantRoutes } from './routes/applicants.js';
 import { interviewRoutes } from './routes/interviews.js';
@@ -10,6 +11,7 @@ import { analyticsRoutes } from './routes/analytics.js';
 import { notificationRoutes } from './routes/notifications.js';
 import employeeRoutes from './routes/employees.js';
 import historyRoutes from './routes/history.js';
+import { matchDetailsRoutes } from './routes/matchDetails.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,6 +22,7 @@ app.use(express.json());
 // Initialize database
 initDatabase().then(() => {
   console.log('Database initialized');
+  startReminderCron();
 });
 
 // Create an API router to handle all routes
@@ -34,6 +37,7 @@ apiRouter.use('/analytics', analyticsRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/employees', employeeRoutes);
 apiRouter.use('/history', historyRoutes);
+apiRouter.use('/match-details', matchDetailsRoutes);
 
 // Health check
 apiRouter.get('/health', (req, res) => {

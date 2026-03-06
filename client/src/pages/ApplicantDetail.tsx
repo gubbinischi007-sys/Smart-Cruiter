@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { applicantsApi, interviewsApi, employeesApi } from '../services/api';
 import { format } from 'date-fns';
-import { ArrowLeft, Mail, Phone, Calendar, Briefcase, FileText, Video, CheckCircle, Info, AlertTriangle, X, UserPlus } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Calendar, Briefcase, FileText, Video, CheckCircle, Info, AlertTriangle, X, UserPlus, Star } from 'lucide-react';
 import { logAction, logApplicationDecision } from '../utils/historyLogger';
 import ConfirmationModal from '../components/ConfirmationModal';
 import './ApplicantDetail.css';
@@ -42,6 +42,8 @@ interface Interview {
   meeting_link?: string;
   notes?: string;
   status: string;
+  rating?: number;
+  feedback?: string;
 }
 
 interface Notification {
@@ -58,10 +60,18 @@ export default function ApplicantDetail() {
   const [loading, setLoading] = useState(true);
   const [showInterviewForm, setShowInterviewForm] = useState(false);
   const [showOfferForm, setShowOfferForm] = useState(false);
+  const [activeScorecardId, setActiveScorecardId] = useState<string | null>(null);
+  const [scorecardForm, setScorecardForm] = useState({ rating: 0, feedback: '' });
+  const generateMeetLink = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyz';
+    const rand = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    return `https://meet.google.com/${rand(3)}-${rand(4)}-${rand(3)}`;
+  };
+
   const [interviewForm, setInterviewForm] = useState({
     scheduled_at: '',
     type: 'online',
-    meeting_link: '',
+    meeting_link: generateMeetLink(),
     notes: '',
   });
   const [offerForm, setOfferForm] = useState({
@@ -109,9 +119,11 @@ export default function ApplicantDetail() {
 
     try {
       await applicantsApi.sendOffer(id, offerForm);
+      // Auto-update stage to Recommended when offer is sent
+      await applicantsApi.update(id, { stage: 'recommended' });
       setShowOfferForm(false);
-      logAction(`Sent offer to ${applicant?.first_name} ${applicant?.last_name}`);
-      addNotification('success', 'Offer letter sent successfully!');
+      logAction(`Sent offer to ${applicant?.first_name} ${applicant?.last_name} and moved to Recommended stage`);
+      addNotification('success', 'Offer letter sent! Stage updated to Recommended.');
       loadData();
     } catch (error) {
       console.error('Failed to send offer:', error);
@@ -123,7 +135,14 @@ export default function ApplicantDetail() {
   const handleStageUpdate = async (newStage: string) => {
     if (!id) return;
     try {
-      await applicantsApi.update(id, { stage: newStage });
+      let rejectionReason = undefined;
+      if (newStage === 'rejected' || newStage === 'declined') {
+        const promptResult = window.prompt("Please provide a reason for rejection (this will be sent to the candidate):");
+        if (promptResult === null) return; // user cancelled
+        rejectionReason = promptResult;
+      }
+
+      await applicantsApi.update(id, { stage: newStage, rejection_reason: rejectionReason });
       logAction(`Updated applicant ${applicant?.first_name} ${applicant?.last_name} to ${newStage}`);
       loadData();
     } catch (error) {
@@ -142,6 +161,15 @@ export default function ApplicantDetail() {
         job_id: applicant.job_id,
         ...interviewForm,
       });
+
+      // Auto-update stage to Shortlisted ONLY if they are still in Applied
+      if (applicant.stage.toLowerCase() === 'applied') {
+        await applicantsApi.update(id, { stage: 'shortlisted' });
+        logAction(`Scheduled ${interviewForm.type} interview for ${applicant.first_name} ${applicant.last_name} and moved to Shortlisted stage`);
+      } else {
+        logAction(`Scheduled ${interviewForm.type} interview for ${applicant.first_name} ${applicant.last_name}`);
+      }
+
       setShowInterviewForm(false);
       setInterviewForm({
         scheduled_at: '',
@@ -149,10 +177,38 @@ export default function ApplicantDetail() {
         meeting_link: '',
         notes: '',
       });
+      addNotification('success', 'Interview scheduled! Stage updated to Shortlisted.');
       loadData();
     } catch (error) {
       console.error('Failed to create interview:', error);
       addNotification('error', 'Failed to create interview');
+    }
+  };
+
+  const handleSubmitScorecard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeScorecardId || scorecardForm.rating === 0) {
+      addNotification('error', 'Please select a rating (1-5 stars)');
+      return;
+    }
+    try {
+      await interviewsApi.update(activeScorecardId, {
+        status: 'completed',
+        rating: scorecardForm.rating,
+        feedback: scorecardForm.feedback,
+      });
+      logAction(`Submitted interview scorecard for ${applicant?.first_name} ${applicant?.last_name} with rating ${scorecardForm.rating}/5`);
+      if (scorecardForm.rating >= 4) {
+        addNotification('success', 'Scorecard submitted! High rating auto-promoted candidate to Recommended.');
+      } else {
+        addNotification('success', 'Scorecard correctly submitted.');
+      }
+      setActiveScorecardId(null);
+      setScorecardForm({ rating: 0, feedback: '' });
+      loadData();
+    } catch (error) {
+      console.error('Failed to submit scorecard:', error);
+      addNotification('error', 'Failed to submit scorecard');
     }
   };
 
@@ -164,6 +220,7 @@ export default function ApplicantDetail() {
     if (!cancelInterviewId) return;
     try {
       await interviewsApi.update(cancelInterviewId, { status: 'cancelled' });
+      logAction(`Cancelled interview for ${applicant?.first_name} ${applicant?.last_name}`);
       addNotification('success', 'Interview cancelled. Applicant has been notified.');
       loadData();
     } catch (error) {
@@ -451,7 +508,11 @@ export default function ApplicantDetail() {
             <button
               className="btn btn-primary"
               onClick={() => setShowOfferForm(true)}
-              disabled={applicant.stage === 'hired' || applicant.offer_status === 'accepted'}
+              disabled={
+                applicant.stage === 'hired' ||
+                applicant.offer_status === 'accepted' ||
+                ['rejected', 'declined', 'withdrawn'].includes(applicant.stage.toLowerCase())
+              }
               style={{ width: '100%' }}
             >
               {applicant.offer_sent_at ? 'Resend Offer' : 'Send Offer Letter'}
@@ -504,17 +565,30 @@ export default function ApplicantDetail() {
                 <label className="form-label-sm">Date & Time</label>
                 <input
                   type="datetime-local"
+                  id="interview-date-applicant"
                   value={interviewForm.scheduled_at}
                   onChange={(e) => setInterviewForm({ ...interviewForm, scheduled_at: e.target.value })}
                   required
                   className="form-input-sm"
+                  style={{ width: '100%' }}
                 />
               </div>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
                 <label className="form-label-sm">Type</label>
                 <select
                   value={interviewForm.type}
-                  onChange={(e) => setInterviewForm({ ...interviewForm, type: e.target.value })}
+                  onChange={(e) => {
+                    const newType = e.target.value;
+                    if (newType === 'online') {
+                      // Auto-generate a mock Google Meet link
+                      const chars = 'abcdefghijklmnopqrstuvwxyz';
+                      const rand = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+                      const mockLink = `https://meet.google.com/${rand(3)}-${rand(4)}-${rand(3)}`;
+                      setInterviewForm({ ...interviewForm, type: newType, meeting_link: mockLink });
+                    } else {
+                      setInterviewForm({ ...interviewForm, type: newType, meeting_link: '' });
+                    }
+                  }}
                   className="form-select-sm"
                 >
                   <option value="online">Online</option>
@@ -523,13 +597,22 @@ export default function ApplicantDetail() {
                 </select>
               </div>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label-sm">Meeting Link</label>
+                <label className="form-label-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  Meeting Link
+                  {interviewForm.type === 'online' && interviewForm.meeting_link && (
+                    <span style={{ fontSize: '0.65rem', background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '99px', padding: '1px 8px', fontWeight: 600 }}>
+                      ✓ Auto-generated
+                    </span>
+                  )}
+                </label>
                 <input
                   type="text"
                   value={interviewForm.meeting_link}
                   onChange={(e) => setInterviewForm({ ...interviewForm, meeting_link: e.target.value })}
-                  placeholder="https://..."
+                  placeholder={interviewForm.type === 'online' ? 'Generating link...' : 'https://...'}
                   className="form-input-sm"
+                  readOnly={interviewForm.type === 'online'}
+                  style={interviewForm.type === 'online' ? { opacity: 0.8, cursor: 'default', color: '#34d399' } : {}}
                 />
               </div>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
@@ -605,15 +688,32 @@ export default function ApplicantDetail() {
                     </div>
                   )}
                   {interview.status === 'scheduled' && (
-                    <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.75rem' }}>
+                    <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        onClick={() => setActiveScorecardId(interview.id)}
+                        className="btn btn-sm btn-success flex items-center gap-1"
+                        style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+                      >
+                        <CheckCircle size={14} /> Submit Review
+                      </button>
                       <button
                         onClick={() => requestCancelInterview(interview.id)}
                         className="btn btn-sm"
                         style={{ background: '#ef4444', padding: '6px 12px', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}
                         title="Cancel Interview"
                       >
-                        <X size={14} /> Cancel Interview
+                        <X size={14} /> Cancel
                       </button>
+                    </div>
+                  )}
+                  {interview.status === 'completed' && interview.rating !== undefined && (
+                    <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.75rem' }}>
+                      <div className="flex items-center gap-1 mb-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star key={star} size={14} fill={star <= interview.rating! ? '#fbbf24' : 'none'} color={star <= interview.rating! ? '#fbbf24' : '#6b7280'} />
+                        ))}
+                      </div>
+                      {interview.feedback && <p className="text-sm text-gray-400 mt-1">{interview.feedback}</p>}
                     </div>
                   )}
                 </div>
@@ -622,7 +722,11 @@ export default function ApplicantDetail() {
           ) : null}
 
           <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowInterviewForm(!showInterviewForm)}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => setShowInterviewForm(!showInterviewForm)}
+              disabled={['rejected', 'declined', 'withdrawn'].includes(applicant.stage.toLowerCase())}
+            >
               {showInterviewForm ? 'Cancel' : 'Schedule Interview'}
             </button>
           </div>
@@ -735,12 +839,65 @@ export default function ApplicantDetail() {
         onClose={() => setCancelInterviewId(null)}
         onConfirm={handleConfirmCancelInterview}
         title="Cancel Interview"
-        message="Are you sure you want to cancel this interview? This action will immediately send a cancellation email to the applicant."
-        type="danger"
+        message="Are you sure you want to cancel this interview? This action cannot be undone and will notify the applicant."
         confirmLabel="Yes, Cancel Interview"
         cancelLabel="Keep Interview"
+        type="danger"
       />
+
+      {activeScorecardId && (
+        <div className="premium-modal-overlay">
+          <div className="premium-modal-container" style={{ maxWidth: '400px' }}>
+            <div className="premium-modal-content">
+              <div className="modal-header">
+                <div className="modal-header-icon icon-bg-accept" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }}>
+                  <CheckCircle size={24} />
+                </div>
+                <div>
+                  <h3 className="modal-title">Submit Review</h3>
+                  <p className="modal-subtitle">Rate candidates performance and provide feedback.</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmitScorecard} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ textAlign: 'center' }}>Rating (1-5)</label>
+                  <div className="flex justify-center gap-2 mt-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        type="button"
+                        key={star}
+                        onClick={() => setScorecardForm({ ...scorecardForm, rating: star })}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem',
+                          color: scorecardForm.rating >= star ? '#fbbf24' : '#6b7280'
+                        }}
+                      >
+                        <Star size={32} fill={scorecardForm.rating >= star ? '#fbbf24' : 'none'} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="form-group mt-4">
+                  <label className="form-label">Feedback Notes</label>
+                  <textarea
+                    required
+                    value={scorecardForm.feedback}
+                    onChange={(e) => setScorecardForm({ ...scorecardForm, feedback: e.target.value })}
+                    placeholder="Share your thoughts on the candidate..."
+                    className="form-textarea"
+                    rows={4}
+                  />
+                </div>
+                <div className="modal-actions mt-4">
+                  <button type="button" className="btn btn-secondary" onClick={() => setActiveScorecardId(null)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" style={{ background: '#10b981', borderColor: '#10b981' }}>Submit Scorecard</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

@@ -70,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (roleTitleInput) localStorage.setItem('userRoleTitle', roleTitleInput);
     // Needed to link logout with this session later
     localStorage.setItem('lastSessionId', sessionId);
+    localStorage.setItem('lastLoginTime', timestamp); // used by historyLogger to find the active session
   };
 
   const logout = () => {

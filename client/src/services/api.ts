@@ -23,10 +23,15 @@ export const applicantsApi = {
   getAll: (params?: { job_id?: string; stage?: string; status?: string; email?: string }) =>
     api.get('/applicants', { params }),
   getById: (id: string) => api.get(`/applicants/${id}`),
-  create: (data: any) => api.post('/applicants', data),
+  create: (data: any) => {
+    if (data instanceof FormData) {
+      return api.post('/applicants', data, { headers: { 'Content-Type': 'multipart/form-data' } });
+    }
+    return api.post('/applicants', data);
+  },
   update: (id: string, data: any) => api.put(`/applicants/${id}`, data),
-  bulkUpdateStage: (applicant_ids: string[], stage: string) =>
-    api.post('/applicants/bulk-update-stage', { applicant_ids, stage }),
+  bulkUpdateStage: (applicant_ids: string[], stage: string, rejection_reason?: string) =>
+    api.post('/applicants/bulk-update-stage', { applicant_ids, stage, rejection_reason }),
   deleteAll: () => api.delete('/applicants'),
   delete: (id: string) => api.delete(`/applicants/${id}`),
   sendOffer: (id: string, data: { salary: string; joining_date: string; notes?: string; rules?: string }) =>

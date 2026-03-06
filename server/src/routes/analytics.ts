@@ -6,32 +6,30 @@ const router = express.Router();
 // Get dashboard statistics
 router.get('/dashboard', async (req, res) => {
   try {
-    const totalJobs = await get<{ count: string }>('SELECT COUNT(*) as count FROM jobs');
-    const openJobs = await get<{ count: string }>('SELECT COUNT(*) as count FROM jobs WHERE status = ?', ['open']);
-    const totalApplicants = await get<{ count: string }>('SELECT COUNT(*) as count FROM applicants');
-
-    const applicantsByStage = await all<{ stage: string; count: number }>(
-      `SELECT stage, COUNT(*) as count FROM applicants GROUP BY stage`
-    );
-
-    const applicantsByJob = await all<{ job_id: string; job_title: string; count: number }>(
-      `SELECT j.id as job_id, j.title as job_title, COUNT(a.id) as count
-       FROM jobs j
-       LEFT JOIN applicants a ON j.id = a.job_id
-       GROUP BY j.id, j.title
-       ORDER BY count DESC
-       LIMIT 10`
-    );
-
-    // PostgreSQL: use NOW() - INTERVAL
-    const recentApplicants = await get<{ count: string }>(
-      `SELECT COUNT(*) as count FROM applicants WHERE applied_at >= NOW() - INTERVAL '30 days'`
-    );
-
-    // PostgreSQL: use NOW() directly
-    const scheduledInterviews = await get<{ count: string }>(
-      `SELECT COUNT(*) as count FROM interviews WHERE status = 'scheduled' AND scheduled_at >= NOW()`
-    );
+    const [
+      totalJobs,
+      openJobs,
+      totalApplicants,
+      applicantsByStage,
+      applicantsByJob,
+      recentApplicants,
+      scheduledInterviews
+    ] = await Promise.all([
+      get<{ count: string }>('SELECT COUNT(*) as count FROM jobs'),
+      get<{ count: string }>('SELECT COUNT(*) as count FROM jobs WHERE status = ?', ['open']),
+      get<{ count: string }>('SELECT COUNT(*) as count FROM applicants'),
+      all<{ stage: string; count: number }>(`SELECT stage, COUNT(*) as count FROM applicants GROUP BY stage`),
+      all<{ job_id: string; job_title: string; count: number }>(
+        `SELECT j.id as job_id, j.title as job_title, COUNT(a.id) as count
+         FROM jobs j
+         LEFT JOIN applicants a ON j.id = a.job_id
+         GROUP BY j.id, j.title
+         ORDER BY count DESC
+         LIMIT 10`
+      ),
+      get<{ count: string }>(`SELECT COUNT(*) as count FROM applicants WHERE applied_at >= datetime('now', '-30 days')`),
+      get<{ count: string }>(`SELECT COUNT(*) as count FROM interviews WHERE status = 'scheduled' AND scheduled_at >= datetime('now')`)
+    ]);
 
     res.json({
       totalJobs: parseInt(totalJobs?.count || '0'),
@@ -78,14 +76,14 @@ router.get('/applicants-over-time', async (req, res) => {
   try {
     const days = parseInt(req.query.days as string) || 30;
 
-    // PostgreSQL: cast to date and use parameterized INTERVAL
+    // SQLite: cast to date
     const data = await all<{ date: string; count: number }>(
-      `SELECT applied_at::date as date, COUNT(*) as count
+      `SELECT DATE(applied_at) as date, COUNT(*) as count
        FROM applicants
-       WHERE applied_at >= NOW() - ($1 || ' days')::INTERVAL
-       GROUP BY applied_at::date
+       WHERE applied_at >= date('now', ?)
+       GROUP BY DATE(applied_at)
        ORDER BY date ASC`,
-      [days]
+      [`-${days} days`]
     );
     res.json(data);
   } catch (error) {
@@ -99,20 +97,11 @@ router.get('/job-stats/:jobId', async (req, res) => {
   try {
     const { jobId } = req.params;
 
-    const totalApplicants = await get<{ count: string }>(
-      'SELECT COUNT(*) as count FROM applicants WHERE job_id = ?',
-      [jobId]
-    );
-
-    const applicantsByStage = await all<{ stage: string; count: number }>(
-      `SELECT stage, COUNT(*) as count FROM applicants WHERE job_id = ? GROUP BY stage`,
-      [jobId]
-    );
-
-    const interviews = await get<{ count: string }>(
-      'SELECT COUNT(*) as count FROM interviews WHERE job_id = ?',
-      [jobId]
-    );
+    const [totalApplicants, applicantsByStage, interviews] = await Promise.all([
+      get<{ count: string }>('SELECT COUNT(*) as count FROM applicants WHERE job_id = ?', [jobId]),
+      all<{ stage: string; count: number }>('SELECT stage, COUNT(*) as count FROM applicants WHERE job_id = ? GROUP BY stage', [jobId]),
+      get<{ count: string }>('SELECT COUNT(*) as count FROM interviews WHERE job_id = ?', [jobId])
+    ]);
 
     res.json({
       totalApplicants: parseInt(totalApplicants?.count || '0'),

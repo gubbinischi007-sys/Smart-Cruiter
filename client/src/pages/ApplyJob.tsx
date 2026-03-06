@@ -102,10 +102,23 @@ export default function ApplyJob() {
 
     setSubmitting(true);
     try {
-      await applicantsApi.create({
-        job_id: id,
-        ...formData,
-      });
+      if (resumeMode === 'file' && resumeFile) {
+        const payload = new FormData();
+        payload.append('job_id', id);
+        payload.append('first_name', formData.first_name);
+        payload.append('last_name', formData.last_name);
+        payload.append('email', formData.email);
+        if (formData.phone) payload.append('phone', formData.phone);
+        if (formData.cover_letter) payload.append('cover_letter', formData.cover_letter);
+        payload.append('resume_url', formData.resume_url); // keep placeholder string
+        payload.append('resume', resumeFile); // attach file body
+        await applicantsApi.create(payload);
+      } else {
+        await applicantsApi.create({
+          job_id: id,
+          ...formData,
+        });
+      }
 
       setStatusModal({
         isOpen: true,
@@ -140,8 +153,8 @@ export default function ApplyJob() {
         return;
       }
       setResumeFile(file);
-      // In a real app, you would upload this file to S3/Blob storage and get a URL.
-      // For this demo, we'll simulate a URL so the backend validation passes.
+      setResumeFile(file);
+      // Even though we upload, set the URL placeholder for DB so it knows a file is attached
       setFormData(prev => ({ ...prev, resume_url: `https://storage.smart-cruiter.com/resumes/${file.name}` }));
     }
   };

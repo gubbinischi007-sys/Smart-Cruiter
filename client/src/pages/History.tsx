@@ -193,7 +193,6 @@ export default function History() {
                                     <th>Status</th>
                                     <th>Reason / Note</th>
                                     <th>Date</th>
-                                    <th style={{ textAlign: 'right' }}>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -236,15 +235,6 @@ export default function History() {
                                             <div className="text-xs text-gray-600">
                                                 {formatTime(record.date)}
                                             </div>
-                                        </td>
-                                        <td style={{ textAlign: 'right' }}>
-                                            <button
-                                                onClick={() => handleDeleteRecord(record.id)}
-                                                className="delete-row-button"
-                                                title="Delete this record"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
                                         </td>
                                     </tr>
                                 ))}

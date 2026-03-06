@@ -1,5 +1,5 @@
-export type ApplicantStage = 'applied' | 'shortlisted' | 'recommended' | 'hired' | 'declined' | 'withdrawn';
-export type ApplicantStatus = 'active' | 'archived';
+export type ApplicantStage = 'applied' | 'shortlisted' | 'recommended' | 'hired' | 'declined' | 'withdrawn' | 'rejected';
+export type ApplicantStatus = 'active' | 'archived' | 'rejected';
 
 export interface Applicant {
   id: string;
@@ -47,5 +47,6 @@ export interface UpdateApplicantInput {
   offer_notes?: string;
   offer_rules?: string;
   offer_sent_at?: string;
+  rejection_reason?: string;
 }
 

@@ -10,6 +10,8 @@ export interface Interview {
   meeting_link?: string;
   notes?: string;
   status: InterviewStatus;
+  rating?: number;
+  feedback?: string;
   created_at: string;
   updated_at: string;
 }
@@ -29,5 +31,7 @@ export interface UpdateInterviewInput {
   meeting_link?: string;
   notes?: string;
   status?: InterviewStatus;
+  rating?: number;
+  feedback?: string;
 }
 
