@@ -13,14 +13,14 @@ interface AuthContextType {
     email: string | null;
     isAuthenticated: boolean;
   };
-  /** Supabase sign-up */
+  /** Supabase sign-up + auto-signs the user in */
   register: (params: {
     email: string;
     password: string;
     name: string;
     role: 'hr' | 'applicant';
     roleTitle?: string;
-  }) => Promise<void>;
+  }) => Promise<AppUser>;
   /** Supabase sign-in */
   login: (email: string, password: string) => Promise<AppUser>;
   /** Supabase sign-out */
@@ -39,6 +39,23 @@ const defaultUser = {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// ─────────────────────────────────────────────────────────
+// Helpers to keep localStorage in sync (for legacy historyLogger)
+// ─────────────────────────────────────────────────────────
+function syncLocalStorage(profile: AppUser) {
+  localStorage.setItem('user', JSON.stringify({
+    id: profile.id,
+    name: profile.name,
+    email: profile.email,
+    role: profile.role,
+    isAuthenticated: true,
+  }));
+}
+function clearLocalStorage() {
+  localStorage.removeItem('user');
+  localStorage.removeItem('lastSessionId');
+}
 
 // ─────────────────────────────────────────────────────────
 // Provider
@@ -65,7 +82,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               email: profile.email,
               isAuthenticated: true,
             });
-            // Keep localStorage in sync for historyLogger (legacy support)
             syncLocalStorage(profile);
           }
         }
@@ -78,12 +94,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     restoreSession();
 
-    // Listen for auth state changes (token refresh, sign-out from another tab, etc.)
+    // Listen for auth state changes (token refresh, sign-out, etc.)
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         setUser(defaultUser);
         clearLocalStorage();
-      } else if (session?.user) {
+        if (mounted) setLoading(false);
+      } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
         const profile = await authService.getProfile(session.user.id);
         if (profile && mounted) {
           setUser({
@@ -95,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isAuthenticated: true,
           });
           syncLocalStorage(profile);
+          if (mounted) setLoading(false);
         }
       }
     });
@@ -105,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // ── Register ──────────────────────────────────────────
+  // ── Register — signs up AND populates the user state immediately ──
   const register = async ({
     email,
     password,
@@ -118,9 +136,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     name: string;
     role: 'hr' | 'applicant';
     roleTitle?: string;
-  }) => {
-    await authService.signUp(email, password, { name, role, roleTitle });
-    // Don't auto-login — user should verify email (or we can auto-login if email confirm is off)
+  }): Promise<AppUser> => {
+    const data = await authService.signUp(email, password, { name, role, roleTitle });
+
+    // signUp with email-confirm disabled returns a live session immediately
+    if (!data.user) throw new Error('Signup failed — no user returned.');
+
+    const profile = await authService.getProfile(data.user.id);
+    if (!profile) throw new Error('Profile creation failed. Please try again.');
+
+    setUser({
+      id: profile.id,
+      name: profile.name,
+      role: profile.role,
+      roleTitle: profile.roleTitle ?? null,
+      email: profile.email,
+      isAuthenticated: true,
+    });
+    syncLocalStorage(profile);
+    return profile;
   };
 
   // ── Login ─────────────────────────────────────────────
@@ -146,7 +180,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Logout ────────────────────────────────────────────
   const logout = async () => {
-    // Record logout time in loginHistory (legacy historyLogger support)
     const sessionId = localStorage.getItem('lastSessionId');
     if (sessionId) {
       const history = JSON.parse(localStorage.getItem('loginHistory') || '[]');
@@ -168,52 +201,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────
-// Hook
-// ─────────────────────────────────────────────────────────
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
-}
-
-// ─────────────────────────────────────────────────────────
-// Helpers (keep localStorage in sync for historyLogger)
-// ─────────────────────────────────────────────────────────
-function syncLocalStorage(profile: AppUser) {
-  const timestamp = new Date().toISOString();
-  const sessionId = crypto.randomUUID();
-
-  localStorage.setItem('userRole', profile.role);
-  localStorage.setItem('userEmail', profile.email);
-  localStorage.setItem('userName', profile.name);
-  if (profile.roleTitle) localStorage.setItem('userRoleTitle', profile.roleTitle);
-
-  if (profile.role === 'hr') {
-    const history = JSON.parse(localStorage.getItem('loginHistory') || '[]');
-    history.forEach((h: any) => {
-      if (h.email === profile.email && h.logoutTime === null) {
-        h.logoutTime = timestamp;
-      }
-    });
-    history.push({
-      id: sessionId,
-      email: profile.email,
-      name: profile.name,
-      loginTime: timestamp,
-      logoutTime: null,
-      role: profile.role,
-    });
-    localStorage.setItem('loginHistory', JSON.stringify(history));
-    localStorage.setItem('lastSessionId', sessionId);
-    localStorage.setItem('lastLoginTime', timestamp);
-  }
-}
-
-function clearLocalStorage() {
-  localStorage.removeItem('userRole');
-  localStorage.removeItem('userEmail');
-  localStorage.removeItem('userName');
-  localStorage.removeItem('userRoleTitle');
-  localStorage.removeItem('lastLoginTime');
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+  return ctx;
 }

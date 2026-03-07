@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   User, ArrowRight, ShieldCheck, Sparkles, ChevronLeft,
@@ -9,10 +9,12 @@ import './Login.css';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, register } = useAuth();
 
+  const initMode = searchParams.get('mode') === 'signup' ? 'signup' : 'login';
   const [selectedRole, setSelectedRole] = useState<'hr' | 'applicant' | null>(null);
-  const [viewMode, setViewMode] = useState<'login' | 'signup'>('login');
+  const [viewMode, setViewMode] = useState<'login' | 'signup'>(initMode);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -67,25 +69,16 @@ export default function Login() {
     try {
       const profile = await login(formData.email.trim(), formData.password.trim());
 
-      // Validate company PIN for HR (client-side guard)
-      if (selectedRole === 'hr') {
-        if (formData.companyPin !== '1975') {
-          showError('Access Denied', 'Invalid Company PIN. Please contact your administrator.');
-          setIsLoading(false);
-          return;
-        }
-        if (profile.role !== 'hr') {
-          showError('Role Mismatch', 'This account is not registered as an HR account.');
-          setIsLoading(false);
-          return;
-        }
+      // Validate role matches what user selected
+      if (profile.role !== selectedRole) {
+        showError('Role Mismatch', `This account is registered as a ${profile.role === 'hr' ? 'Recruiter/HR' : 'Job Seeker'}. Please select the correct role.`);
+        setIsLoading(false);
+        return;
+      }
+
+      if (profile.role === 'hr') {
         navigate('/admin');
       } else {
-        if (profile.role !== 'applicant') {
-          showError('Role Mismatch', 'This account is not a candidate account.');
-          setIsLoading(false);
-          return;
-        }
         navigate('/candidate/dashboard');
       }
     } catch (err: any) {
@@ -115,16 +108,10 @@ export default function Login() {
       return;
     }
 
-    // HR requires PIN (invite code = '1975' as default, will be replaced with real company codes)
-    if (selectedRole === 'hr' && formData.companyPin !== '1975') {
-      showError('Access Restricted', 'Invalid Company PIN. HR registration requires a valid PIN.');
-      return;
-    }
-
     setIsLoading(true);
     try {
-      // Register with Supabase
-      await register({
+      // register() now signs up AND populates auth state — no extra login() needed
+      const profile = await register({
         email: formData.email.trim(),
         password: formData.password.trim(),
         name: formData.name.trim(),
@@ -132,12 +119,8 @@ export default function Login() {
         roleTitle: formData.roleTitle.trim() || undefined,
       });
 
-      // Immediately sign in (email confirmation is disabled)
-      const profile = await login(formData.email.trim(), formData.password.trim());
-
-      // Redirect based on role
+      // Redirect based on the returned profile role
       if (profile.role === 'hr') {
-        // HR goes to company setup (create or join workspace)
         navigate('/company-setup');
       } else {
         navigate('/candidate/dashboard');
