@@ -10,6 +10,7 @@ import EditJob from './pages/EditJob';
 import PublicJobDetail from './pages/PublicJobDetail';
 import ApplyJob from './pages/ApplyJob';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import Landing from './pages/Landing';
 import CandidateLayout from './components/CandidateLayout';
 import CandidateDashboard from './pages/CandidateDashboard';
@@ -47,6 +48,7 @@ function App() {
       {/* Public routes */}
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/public/jobs/:id" element={<PublicJobDetail />} />
       <Route path="/public/jobs/:id/apply" element={<ApplyJob />} />
 

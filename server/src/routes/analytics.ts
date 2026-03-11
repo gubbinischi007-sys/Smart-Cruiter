@@ -6,6 +6,18 @@ const router = express.Router();
 // Get dashboard statistics
 router.get('/dashboard', async (req, res) => {
   try {
+    const companyId = req.headers['x-company-id'] as string;
+    const jobFilter = companyId ? 'WHERE company_id = ?' : '';
+    const jobStatusFilter = companyId ? 'WHERE status = ? AND company_id = ?' : 'WHERE status = ?';
+    const applicantFilter = companyId ? 'WHERE job_id IN (SELECT id FROM jobs WHERE company_id = ?)' : '';
+    const interviewFilter = companyId ? "AND job_id IN (SELECT id FROM jobs WHERE company_id = ?)" : "";
+    const applicantTimeFilter = companyId
+      ? "WHERE applied_at >= datetime('now', '-30 days') AND job_id IN (SELECT id FROM jobs WHERE company_id = ?)"
+      : "WHERE applied_at >= datetime('now', '-30 days')";
+
+    const cIdArr = companyId ? [companyId] : [];
+    const statusArr = companyId ? ['open', companyId] : ['open'];
+
     const [
       totalJobs,
       openJobs,
@@ -15,20 +27,22 @@ router.get('/dashboard', async (req, res) => {
       recentApplicants,
       scheduledInterviews
     ] = await Promise.all([
-      get<{ count: string }>('SELECT COUNT(*) as count FROM jobs'),
-      get<{ count: string }>('SELECT COUNT(*) as count FROM jobs WHERE status = ?', ['open']),
-      get<{ count: string }>('SELECT COUNT(*) as count FROM applicants'),
-      all<{ stage: string; count: number }>(`SELECT stage, COUNT(*) as count FROM applicants GROUP BY stage`),
+      get<{ count: string }>(`SELECT COUNT(*) as count FROM jobs ${jobFilter}`, cIdArr),
+      get<{ count: string }>(`SELECT COUNT(*) as count FROM jobs ${jobStatusFilter}`, statusArr),
+      get<{ count: string }>(`SELECT COUNT(*) as count FROM applicants ${applicantFilter}`, cIdArr),
+      all<{ stage: string; count: number }>(`SELECT stage, COUNT(*) as count FROM applicants ${applicantFilter} GROUP BY stage`, cIdArr),
       all<{ job_id: string; job_title: string; count: number }>(
         `SELECT j.id as job_id, j.title as job_title, COUNT(a.id) as count
          FROM jobs j
          LEFT JOIN applicants a ON j.id = a.job_id
+         ${jobFilter}
          GROUP BY j.id, j.title
          ORDER BY count DESC
-         LIMIT 10`
+         LIMIT 10`,
+        cIdArr
       ),
-      get<{ count: string }>(`SELECT COUNT(*) as count FROM applicants WHERE applied_at >= datetime('now', '-30 days')`),
-      get<{ count: string }>(`SELECT COUNT(*) as count FROM interviews WHERE status = 'scheduled' AND scheduled_at >= datetime('now')`)
+      get<{ count: string }>(`SELECT COUNT(*) as count FROM applicants ${applicantTimeFilter}`, cIdArr),
+      get<{ count: string }>(`SELECT COUNT(*) as count FROM interviews WHERE status = 'scheduled' AND scheduled_at >= datetime('now') ${interviewFilter}`, cIdArr)
     ]);
 
     res.json({
@@ -49,9 +63,14 @@ router.get('/dashboard', async (req, res) => {
 // Get applicants by stage (for charts)
 router.get('/applicants-by-stage', async (req, res) => {
   try {
+    const companyId = req.headers['x-company-id'] as string;
+    const applicantFilter = companyId ? 'WHERE job_id IN (SELECT id FROM jobs WHERE company_id = ?)' : '';
+    const cIdArr = companyId ? [companyId] : [];
+
     const data = await all<{ stage: string; count: number }>(
       `SELECT stage, COUNT(*) as count
        FROM applicants
+       ${applicantFilter}
        GROUP BY stage
        ORDER BY
          CASE stage
@@ -75,15 +94,20 @@ router.get('/applicants-by-stage', async (req, res) => {
 router.get('/applicants-over-time', async (req, res) => {
   try {
     const days = parseInt(req.query.days as string) || 30;
+    const companyId = req.headers['x-company-id'] as string;
+
+    const timeFilter = `applied_at >= date('now', ?)`;
+    const companyFilter = companyId ? `AND job_id IN (SELECT id FROM jobs WHERE company_id = ?)` : '';
+    const queryParams = companyId ? [`-${days} days`, companyId] : [`-${days} days`];
 
     // SQLite: cast to date
     const data = await all<{ date: string; count: number }>(
       `SELECT DATE(applied_at) as date, COUNT(*) as count
        FROM applicants
-       WHERE applied_at >= date('now', ?)
+       WHERE ${timeFilter} ${companyFilter}
        GROUP BY DATE(applied_at)
        ORDER BY date ASC`,
-      [`-${days} days`]
+      queryParams
     );
     res.json(data);
   } catch (error) {

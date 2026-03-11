@@ -12,6 +12,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { applicant_id, job_id, status } = req.query;
+    const companyId = req.headers['x-company-id'];
     let query = `
       SELECT i.*, 
              a.first_name || ' ' || a.last_name as applicant_name,
@@ -23,6 +24,11 @@ router.get('/', async (req, res) => {
       WHERE 1=1
     `;
     const params: any[] = [];
+
+    if (companyId) {
+      query += ' AND j.company_id = ?';
+      params.push(companyId);
+    }
 
     if (applicant_id) {
       query += ' AND i.applicant_id = ?';

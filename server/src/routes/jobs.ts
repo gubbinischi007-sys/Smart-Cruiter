@@ -11,13 +11,21 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { status } = req.query;
-    let query = 'SELECT * FROM jobs ORDER BY created_at DESC';
+    const companyId = req.headers['x-company-id'];
+    let query = 'SELECT * FROM jobs WHERE 1=1';
     const params: any[] = [];
 
     if (status) {
-      query = 'SELECT * FROM jobs WHERE status = ? ORDER BY created_at DESC';
+      query += ' AND status = ?';
       params.push(status);
     }
+
+    if (companyId) {
+      query += ' AND company_id = ?';
+      params.push(companyId);
+    }
+
+    query += ' ORDER BY created_at DESC';
 
     const jobs = await all<Job>(query, params);
     res.json(jobs);
@@ -45,12 +53,13 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const input: CreateJobInput = req.body;
+    const companyId = req.headers['x-company-id'];
     const id = uuidv4();
     const now = new Date().toISOString();
 
     await run(
-      `INSERT INTO jobs (id, title, department, location, type, description, requirements, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO jobs (id, title, department, location, type, description, requirements, status, company_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         input.title,
@@ -60,6 +69,7 @@ router.post('/', async (req, res) => {
         input.description || null,
         input.requirements || null,
         input.status || 'open',
+        companyId || null,
         now,
         now,
       ]

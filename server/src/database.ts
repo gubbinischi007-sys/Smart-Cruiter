@@ -42,6 +42,7 @@ export async function initDatabase(): Promise<void> {
       description TEXT,
       requirements TEXT,
       status TEXT DEFAULT 'open',
+      company_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
@@ -90,6 +91,7 @@ export async function initDatabase(): Promise<void> {
       department TEXT,
       hired_date DATETIME,
       status TEXT DEFAULT 'active',
+      company_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS notifications (
@@ -108,6 +110,7 @@ export async function initDatabase(): Promise<void> {
       job_title TEXT,
       status TEXT NOT NULL,
       reason TEXT,
+      company_id TEXT,
       date DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE INDEX IF NOT EXISTS idx_applicants_job_id ON applicants(job_id)`,
@@ -170,6 +173,32 @@ export async function initDatabase(): Promise<void> {
   } catch (error: any) {
     if (!error.message.includes('duplicate column name')) {
       console.error('Error adding resume_text column:', error);
+    }
+  }
+
+  // Add company_id columns
+  try {
+    await database.run(`ALTER TABLE jobs ADD COLUMN company_id TEXT`);
+    console.log('Added company_id column to jobs table');
+  } catch (error: any) {
+    if (!error.message.includes('duplicate column name')) {
+      console.error('Error adding company_id column to jobs:', error);
+    }
+  }
+  try {
+    await database.run(`ALTER TABLE employees ADD COLUMN company_id TEXT`);
+    console.log('Added company_id column to employees table');
+  } catch (error: any) {
+    if (!error.message.includes('duplicate column name')) {
+      console.error('Error adding company_id column to employees:', error);
+    }
+  }
+  try {
+    await database.run(`ALTER TABLE application_history ADD COLUMN company_id TEXT`);
+    console.log('Added company_id column to application_history table');
+  } catch (error: any) {
+    if (!error.message.includes('duplicate column name')) {
+      console.error('Error adding company_id column to application_history:', error);
     }
   }
 }

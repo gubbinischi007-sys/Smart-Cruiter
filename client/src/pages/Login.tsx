@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { authService } from '../lib/supabase';
 import {
   User, ArrowRight, ShieldCheck, Sparkles, ChevronLeft,
   Lock, Mail, CheckCircle, Briefcase, Eye, EyeOff, AlertCircle, Building2
@@ -14,7 +15,7 @@ export default function Login() {
 
   const initMode = searchParams.get('mode') === 'signup' ? 'signup' : 'login';
   const [selectedRole, setSelectedRole] = useState<'hr' | 'applicant' | null>(null);
-  const [viewMode, setViewMode] = useState<'login' | 'signup'>(initMode);
+  const [viewMode, setViewMode] = useState<'login' | 'signup' | 'forgot_password'>(initMode);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -137,6 +138,21 @@ export default function Login() {
     }
   };
 
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.email) return;
+
+    setIsLoading(true);
+    try {
+      await authService.resetPassword(formData.email.trim());
+      showSuccess('Reset Link Sent', 'If an account exists for this email, you will receive a password reset link shortly.');
+    } catch (err: any) {
+      showError('Reset Failed', err?.message || 'Failed to send reset email. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const isHR = selectedRole === 'hr';
   const accentColor = isHR ? '#6366f1' : '#22c55e';
   const accentGradient = isHR
@@ -227,10 +243,12 @@ export default function Login() {
                 <h2 className="form-title">
                   {viewMode === 'login'
                     ? (isHR ? 'Recruiter Sign In' : 'Candidate Sign In')
-                    : (isHR ? 'Create HR Account' : 'Create Account')}
+                    : viewMode === 'signup'
+                      ? (isHR ? 'Create HR Account' : 'Create Account')
+                      : 'Reset Password'}
                 </h2>
                 <p className="form-subtitle">
-                  {viewMode === 'login' ? 'Enter your credentials to access your account' : 'Fill in your details to get started'}
+                  {viewMode === 'login' ? 'Enter your credentials to access your account' : viewMode === 'signup' ? 'Fill in your details to get started' : 'Enter your email to request a reset link'}
                 </p>
               </div>
 
@@ -307,7 +325,7 @@ export default function Login() {
                   <div className="form-group">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                       <label className="form-label" htmlFor="password" style={{ margin: 0 }}>Password</label>
-                      <button type="button" style={{ background: 'none', border: 'none', color: accentColor, fontSize: '0.8rem', cursor: 'pointer', fontWeight: 500 }}>
+                      <button type="button" onClick={() => setViewMode('forgot_password')} style={{ background: 'none', border: 'none', color: accentColor, fontSize: '0.8rem', cursor: 'pointer', fontWeight: 500 }}>
                         Forgot password?
                       </button>
                     </div>
@@ -429,6 +447,29 @@ export default function Login() {
                   <button type="submit" className="btn-primary" disabled={isLoading}
                     style={{ background: accentGradient }}>
                     {isLoading ? 'Creating account...' : 'Create Account →'}
+                  </button>
+                </form>
+              )}
+
+              {/* ======= FORGOT PASSWORD FORM ======= */}
+              {viewMode === 'forgot_password' && (
+                <form onSubmit={handleForgotPasswordSubmit}>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="email">Email Address</label>
+                    <div style={{ position: 'relative' }}>
+                      <Mail size={18} style={{ position: 'absolute', top: '50%', left: '1rem', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+                      <input
+                        id="email" type="email" className="form-input"
+                        style={{ paddingLeft: '2.5rem' }}
+                        placeholder="name@company.com"
+                        value={formData.email} onChange={handleChange} required
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" className="btn-primary" disabled={isLoading}
+                    style={{ background: accentGradient }}>
+                    {isLoading ? 'Sending...' : 'Send Reset Link →'}
                   </button>
                 </form>
               )}

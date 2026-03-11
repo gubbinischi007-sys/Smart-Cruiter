@@ -8,12 +8,17 @@ const router = Router();
 router.get('/', async (req, res) => {
     try {
         const { email } = req.query;
-        let query = 'SELECT * FROM application_history';
+        const companyId = req.headers['x-company-id'];
+        let query = 'SELECT * FROM application_history WHERE 1=1';
         const params: any[] = [];
 
         if (email) {
-            query += ' WHERE email = ?';
+            query += ' AND email = ?';
             params.push(email);
+        }
+        if (companyId) {
+            query += ' AND company_id = ?';
+            params.push(companyId);
         }
 
         query += ' ORDER BY date DESC';
@@ -29,7 +34,16 @@ router.get('/', async (req, res) => {
 // POST new history record
 router.get('/stats', async (req, res) => {
     try {
-        const stats = await all('SELECT status, COUNT(*) as count FROM application_history GROUP BY status');
+        const companyId = req.headers['x-company-id'];
+        let query = 'SELECT status, COUNT(*) as count FROM application_history WHERE 1=1';
+        const params: any[] = [];
+        if (companyId) {
+            query += ' AND company_id = ?';
+            params.push(companyId);
+        }
+        query += ' GROUP BY status';
+
+        const stats = await all(query, params);
         res.json(stats);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch stats' });
@@ -38,6 +52,7 @@ router.get('/stats', async (req, res) => {
 
 router.post('/', async (req, res) => {
     const { name, email, job_title, status, reason } = req.body;
+    const companyId = req.headers['x-company-id'];
 
     if (!name || !email || !status) {
         return res.status(400).json({ error: 'Missing required fields' });
@@ -46,8 +61,8 @@ router.post('/', async (req, res) => {
     try {
         const id = uuidv4();
         await run(
-            'INSERT INTO application_history (id, name, email, job_title, status, reason, date) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [id, name, email, job_title, status, reason, new Date().toISOString()]
+            'INSERT INTO application_history (id, name, email, job_title, status, reason, company_id, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, name, email, job_title, status, reason, companyId || null, new Date().toISOString()]
         );
         res.status(201).json({ id, name, email, status });
     } catch (error) {

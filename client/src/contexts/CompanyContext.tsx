@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { setCompanyId } from '../services/api';
 
 interface Company {
     id: string;
@@ -27,6 +28,10 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
     const [company, setCompany] = useState<Company | null>(null);
     const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        setCompanyId(company?.id || null);
+    }, [company?.id]);
 
     const fetchCompany = async () => {
         if (!user.id || user.role !== 'hr') {

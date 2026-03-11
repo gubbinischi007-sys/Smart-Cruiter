@@ -7,7 +7,15 @@ const router = express.Router();
 // Get all employees
 router.get('/', async (req, res) => {
     try {
-        const employees = await all('SELECT * FROM employees ORDER BY created_at DESC');
+        const companyId = req.headers['x-company-id'];
+        let query = 'SELECT * FROM employees';
+        const params: any[] = [];
+        if (companyId) {
+            query += ' WHERE company_id = ?';
+            params.push(companyId);
+        }
+        query += ' ORDER BY created_at DESC';
+        const employees = await all(query, params);
         res.json(employees);
     } catch (error) {
         console.error('Error fetching employees:', error);
@@ -18,6 +26,7 @@ router.get('/', async (req, res) => {
 // Create new employee (Onboard)
 router.post('/', async (req, res) => {
     const { applicant_id, name, email, job_title, department, hired_date, status } = req.body;
+    const companyId = req.headers['x-company-id'];
 
     if (!name || !email) {
         return res.status(400).json({ error: 'Name and email are required' });
@@ -25,16 +34,16 @@ router.post('/', async (req, res) => {
 
     try {
         // Check if employee already exists by email
-        const existing = await get('SELECT * FROM employees WHERE email = ?', [email]);
+        const existing = await get('SELECT * FROM employees WHERE email = ? AND company_id = ?', [email, companyId || '']);
         if (existing) {
             return res.status(400).json({ error: 'Employee with this email already exists' });
         }
 
         const id = uuidv4();
         await run(
-            `INSERT INTO employees (id, applicant_id, name, email, job_title, department, hired_date, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, applicant_id || null, name, email, job_title, department, hired_date || new Date().toISOString(), status || 'active']
+            `INSERT INTO employees (id, applicant_id, name, email, job_title, department, hired_date, status, company_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, applicant_id || null, name, email, job_title, department, hired_date || new Date().toISOString(), status || 'active', companyId || null]
         );
 
         const newEmployee = await get('SELECT * FROM employees WHERE id = ?', [id]);

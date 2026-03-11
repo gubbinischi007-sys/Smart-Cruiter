@@ -9,6 +9,15 @@ const api = axios.create({
   },
 });
 
+export const setCompanyId = (companyId: string | null) => {
+  if (companyId) {
+    api.defaults.headers.common['x-company-id'] = companyId;
+  } else {
+    delete api.defaults.headers.common['x-company-id'];
+  }
+};
+
+
 // Jobs API
 export const jobsApi = {
   getAll: (status?: string) => api.get('/jobs', { params: { status } }),
