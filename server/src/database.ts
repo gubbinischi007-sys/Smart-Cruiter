@@ -120,22 +120,23 @@ function parseDelete(sql: string, params: any[]): { table: string; filters: Reco
 // Parse SELECT statements
 // ─────────────────────────────────────────────────────────
 function parseSelect(sql: string, params: any[]): { table: string; filters: Record<string, any>; orderBy?: string; orderDir?: string; limit?: number } | null {
-  const m = sql.match(/FROM\s+(\w+)/i);
+  const m = sql.match(/FROM\s+"?(\w+)"?(?:\s+as\s+)?(?:\s+\w+)?/i);
   if (!m) return null;
   const table = m[1];
 
   const filters: Record<string, any> = {};
   let paramIdx = 0;
 
-  // WHERE conditions (col = ?)
-  const whereMatch = sql.match(/WHERE\s+(.+?)(?:\s+ORDER|\s+LIMIT|$)/i);
+  // WHERE conditions (handles j.id = ? or id = ?)
+  const whereMatch = sql.match(/WHERE\s+(.+?)(?:\s+GROUP|\s+ORDER|\s+LIMIT|$)/i);
   if (whereMatch) {
     const wherePart = whereMatch[1];
     const conds = wherePart.split(/\s+AND\s+/i);
     for (const cond of conds) {
-      const cm = cond.trim().match(/(\w+)\s*=\s*\?/i);
+      // Handle "column = ?" or "alias.column = ?"
+      const cm = cond.trim().match(/(?:(\w+)\.)?(\w+)\s*=\s*\?/i);
       if (cm && paramIdx < params.length) {
-        filters[cm[1]] = params[paramIdx++];
+        filters[cm[2]] = params[paramIdx++];
       }
     }
   }
@@ -221,6 +222,24 @@ export async function all<T = any>(sql: string, params: any[] = []): Promise<T[]
   if (!parsed) throw new Error(`Could not parse SELECT: ${sql}`);
   const { table, filters, orderBy, orderDir, limit } = parsed;
 
+  const isCount = sql.toUpperCase().includes('COUNT(*)');
+  
+  // Handle COUNT(*) specifically
+  if (isCount) {
+    let query = supabase.from(table).select('*', { count: 'exact', head: true });
+    
+    for (const [col, val] of Object.entries(filters)) {
+      if (val === null) query = query.is(col, null);
+      else query = query.eq(col, val);
+    }
+
+    const { count, error } = await query;
+    if (error) throw error;
+    // Return a shimmed count object to match existing backend expectations
+    return [{ count: String(count || 0) }] as any;
+  }
+
+  // Normal SELECT
   let query = supabase.from(table).select('*');
 
   for (const [col, val] of Object.entries(filters)) {

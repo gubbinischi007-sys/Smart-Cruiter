@@ -53,7 +53,14 @@ export default function PlatformAdmin() {
         }
     };
 
-    const updateCompliance = async (id: string, updates: Partial<Company>) => {
+    const updateCompliance = async (id: string, updates: any) => {
+        // Set timestamps when checkmarks are toggled
+        if (updates.admin_doc_verified === true) updates.admin_doc_verified_at = new Date().toISOString();
+        if (updates.admin_doc_verified === false) updates.admin_doc_verified_at = null;
+        
+        if (updates.admin_bg_checked === true) updates.admin_bg_checked_at = new Date().toISOString();
+        if (updates.admin_bg_checked === false) updates.admin_bg_checked_at = null;
+
         // Optimistically update the UI to prevent switch lag
         setCompanies(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
 

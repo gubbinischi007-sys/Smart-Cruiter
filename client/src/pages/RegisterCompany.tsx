@@ -1,13 +1,15 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Building2, ArrowRight, CheckCircle, AlertCircle, Sparkles, FileText, Mail, Link as LinkIcon, UploadCloud } from 'lucide-react';
+import { Building2, ArrowRight, CheckCircle, AlertCircle, Sparkles, FileText, Mail, Link as LinkIcon, UploadCloud, Copy, Check } from 'lucide-react';
 import './CompanySetup.css';
 
 export default function RegisterCompany() {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [trackingId, setTrackingId] = useState('');
+    const [copied, setCopied] = useState(false);
     
     // OCR Scanning State
     const [isScanning, setIsScanning] = useState(false);
@@ -65,7 +67,7 @@ export default function RegisterCompany() {
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.companyName.trim() || !formData.email.trim()) return;
+        if (!formData.companyName.trim()) return;
         if (docMethod === 'link' && !formData.documentUrl.trim()) {
             setError('Please provide a link to your business document.');
             return;
@@ -141,7 +143,7 @@ export default function RegisterCompany() {
             }
             
             // Call the public RPC function to register the company
-            const { error: rpcError } = await supabase.rpc('register_company_application', {
+            const { data: rpcData, error: rpcError } = await supabase.rpc('register_company_application', {
                 p_name: formData.companyName.trim(),
                 p_slug: slug,
                 p_email: formData.email.trim(),
@@ -154,6 +156,8 @@ export default function RegisterCompany() {
                 }
                 throw rpcError;
             }
+
+            if (rpcData) setTrackingId(rpcData);
 
             // Immediately pipe the artificially generated OCR data into the new table rows we created
             if (extractedTaxId) {
@@ -240,14 +244,34 @@ export default function RegisterCompany() {
                             Our team will review your application and documentation.
                         </p>
 
+                        {trackingId && (
+                            <div style={{ marginBottom: '1.5rem', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '10px', padding: '1.25rem' }}>
+                                <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Your Tracking ID</p>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    <span style={{ fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: 700, color: '#a78bfa', flex: 1, letterSpacing: '0.1em' }}>{trackingId}</span>
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(trackingId);
+                                            setCopied(true);
+                                            setTimeout(() => setCopied(false), 2000);
+                                        }}
+                                        style={{ background: copied ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.15)', border: `1px solid ${copied ? 'rgba(16,185,129,0.4)' : 'rgba(99,102,241,0.4)'}`, borderRadius: '6px', padding: '0.4rem 0.75rem', cursor: 'pointer', color: copied ? '#10b981' : '#a78bfa', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', transition: 'all 0.2s' }}
+                                    >
+                                        {copied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
+                                    </button>
+                                </div>
+                                <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem', margin: '0.5rem 0 0' }}>Save this ID — you'll need it to track your application status.</p>
+                            </div>
+                        )}
+
                         <div className="invite-code-display" style={{ marginBottom: '1.5rem', border: '1px dashed rgba(255,255,255,0.2)' }}>
                             <p style={{ fontSize: '0.9rem', color: '#cbd5e1', textAlign: 'center', margin: 0 }}>
-                                Expected review time: <strong>24-48 hours</strong>
+                                Expected review time: <strong>5–7 business days</strong>
                             </p>
                         </div>
 
                         <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.5rem' }}>
-                            We will send a secure <strong>Company PIN</strong> to <strong>{formData.email}</strong> once approved. Your HR staff will use this PIN to create their accounts.
+                            Once approved, you will be able to <strong>Claim your Workspace</strong> using your Tracking ID and set your own private <strong>Company PIN</strong> for your team.
                         </p>
 
                         <button className="btn-cta" onClick={() => navigate('/')}>
@@ -279,7 +303,7 @@ export default function RegisterCompany() {
                             </div>
 
                             <div className="field-group">
-                                <label>Official Representative Email</label>
+                                <label>Official Representative Email <span style={{ color: '#64748b', fontWeight: 400 }}>(Optional)</span></label>
                                 <div className="url-input-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', padding: '0 1rem', borderRadius: '8px' }}>
                                     <Mail size={18} color="#9ca3af" />
                                     <input
@@ -288,7 +312,7 @@ export default function RegisterCompany() {
                                         placeholder="representative@acme.com"
                                         value={formData.email}
                                         onChange={handleChange}
-                                        required
+
                                         style={{ border: 'none', background: 'transparent', padding: '0.75rem 0', flex: 1, outline: 'none', color: '#f8fafc' }}
                                     />
                                 </div>

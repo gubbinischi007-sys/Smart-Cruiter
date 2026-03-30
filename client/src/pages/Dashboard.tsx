@@ -45,22 +45,31 @@ export default function Dashboard() {
 
   const loadDashboard = async () => {
     try {
-      const [statsRes, appsRes, interviewsRes] = await Promise.all([
+      const results = await Promise.allSettled([
         analyticsApi.getDashboard(),
         applicantsApi.getAll(),
         interviewsApi.getAll()
       ]);
 
-      setStats(statsRes.data);
+      if (results[0].status === 'fulfilled') {
+        setStats((results[0] as any).value.data);
+      } else {
+        console.error('Analytics failed:', (results[0] as any).reason);
+        // Set basic empty stats to allow rendering
+        setStats({ totalJobs: 0, openJobs: 0, totalApplicants: 0, recentApplicants: 0, scheduledInterviews: 0, applicantsByStage: [], applicantsByJob: [] });
+      }
 
-      // Process recent applications (last 5)
-      setRecentApplications(appsRes.data.slice(0, 5));
+      if (results[1].status === 'fulfilled') {
+        setRecentApplications((results[1] as any).value.data.slice(0, 5));
+      }
 
-      const now = new Date();
-      const upcoming = interviewsRes.data
-        .filter((i: any) => new Date(i.scheduled_at) > now)
-        .slice(0, 5);
-      setUpcomingInterviews(upcoming);
+      if (results[2].status === 'fulfilled') {
+        const now = new Date();
+        const upcoming = (results[2] as any).value.data
+          .filter((i: any) => new Date(i.scheduled_at) > now)
+          .slice(0, 5);
+        setUpcomingInterviews(upcoming);
+      }
 
       // Fetch company verification status if HR
       if (user.role === 'hr' && user.email) {

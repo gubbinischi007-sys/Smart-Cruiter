@@ -78,7 +78,7 @@ export default function Login() {
       const { data: company, error } = await supabase
         .from('companies')
         .select('id, name, status')
-        .eq('invite_code', formData.companyPin.trim())
+        .eq('company_pin', formData.companyPin.trim())
         .single();
 
       if (error || !company) {
@@ -328,9 +328,13 @@ export default function Login() {
 
               <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: '10px' }}>
                 <h4 style={{ color: '#818cf8', margin: '0 0 0.4rem 0', fontSize: '0.85rem' }}>Don't have a PIN?</h4>
-                <p style={{ margin: 0, color: '#64748b', fontSize: '0.8rem', lineHeight: 1.5 }}>
+                <p style={{ margin: '0 0 0.6rem 0', color: '#64748b', fontSize: '0.8rem', lineHeight: 1.5 }}>
                   Your company must be registered and approved first.{' '}
                   <Link to="/register-company" style={{ color: '#818cf8', textDecoration: 'underline' }}>Register Company →</Link>
+                </p>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '0.8rem', lineHeight: 1.5 }}>
+                  Already applied and waiting for approval?{' '}
+                  <Link to="/track-application" style={{ color: '#a78bfa', textDecoration: 'underline', fontWeight: 500 }}>Track your application status →</Link>
                 </p>
               </div>
             </div>

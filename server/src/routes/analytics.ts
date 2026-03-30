@@ -18,15 +18,7 @@ router.get('/dashboard', async (req, res) => {
     const cIdArr = companyId ? [companyId] : [];
     const statusArr = companyId ? ['open', companyId] : ['open'];
 
-    const [
-      totalJobs,
-      openJobs,
-      totalApplicants,
-      applicantsByStage,
-      applicantsByJob,
-      recentApplicants,
-      scheduledInterviews
-    ] = await Promise.all([
+    const results = await Promise.allSettled([
       get<{ count: string }>(`SELECT COUNT(*) as count FROM jobs ${jobFilter}`, cIdArr),
       get<{ count: string }>(`SELECT COUNT(*) as count FROM jobs ${jobStatusFilter}`, statusArr),
       get<{ count: string }>(`SELECT COUNT(*) as count FROM applicants ${applicantFilter}`, cIdArr),
@@ -44,6 +36,17 @@ router.get('/dashboard', async (req, res) => {
       get<{ count: string }>(`SELECT COUNT(*) as count FROM applicants ${applicantTimeFilter}`, cIdArr),
       get<{ count: string }>(`SELECT COUNT(*) as count FROM interviews WHERE status = 'scheduled' AND scheduled_at >= datetime('now') ${interviewFilter}`, cIdArr)
     ]);
+
+    // Helper to get result or default
+    const val = (index: number, def: any) => results[index].status === 'fulfilled' ? (results[index] as any).value : def;
+
+    const totalJobs = val(0, { count: '0' });
+    const openJobs = val(1, { count: '0' });
+    const totalApplicants = val(2, { count: '0' });
+    const applicantsByStage = val(3, []);
+    const applicantsByJob = val(4, []);
+    const recentApplicants = val(5, { count: '0' });
+    const scheduledInterviews = val(6, { count: '0' });
 
     res.json({
       totalJobs: parseInt(totalJobs?.count || '0'),

@@ -30,6 +30,7 @@ import { useAuth } from './contexts/AuthContext';
 import PlatformAdmin from './pages/PlatformAdmin';
 import ReferenceForm from './pages/ReferenceForm';
 import AdminLogin from './pages/AdminLogin';
+import ClaimWorkspace from './pages/ClaimWorkspace';
 
 /** Redirects HR users without a company to the company setup page */
 function CompanyGuard({ children }: { children: JSX.Element }) {
@@ -58,6 +59,7 @@ function App() {
       <Route path="/reference-check/:token" element={<ReferenceForm />} />
       <Route path="/register-company" element={<RegisterCompany />} />
       <Route path="/track-application" element={<TrackApplication />} />
+      <Route path="/claim-workspace" element={<ClaimWorkspace />} />
 
       {/* Platform Admin route (Handles its own security checks and lock screens natively) */}
       <Route path="/platform-admin" element={<PlatformAdmin />} />

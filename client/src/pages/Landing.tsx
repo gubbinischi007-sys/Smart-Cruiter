@@ -83,6 +83,7 @@ export default function Landing() {
                         <a href="#features">Features</a>
                         <a href="#stats">Why Us</a>
                         <a href="#testimonials">Reviews</a>
+                        <Link to="/track-application" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.95rem' }}>Track Application</Link>
                     </div>
                     <div className="nav-cta-group">
                         <Link to="/login" className="nav-signin">Sign In</Link>
@@ -298,6 +299,8 @@ export default function Landing() {
                     <div className="footer-links">
                         <Link to="/login">Sign In</Link>
                         <Link to="/login?mode=signup">Sign Up</Link>
+                        <Link to="/track-application">Track Application</Link>
+                        <Link to="/register-company">Register Company</Link>
                     </div>
                     <p className="footer-copy">© 2026 SmartCruiter. Built with ❤️ for modern HR teams.</p>
                 </div>
