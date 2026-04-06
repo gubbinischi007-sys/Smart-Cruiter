@@ -16,12 +16,14 @@ export default function Login() {
   const initMode = searchParams.get('mode') === 'signup' ? 'signup' : 'login';
   const initRoleParam = searchParams.get('role');
   const initRole = (initRoleParam === 'hr' || initRoleParam === 'applicant') ? initRoleParam : null;
-  
+
   const [selectedRole, setSelectedRole] = useState<'hr' | 'applicant' | null>(initRole);
   const [viewMode, setViewMode] = useState<'login' | 'signup' | 'forgot_password'>(initMode);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  const [hrAccessType, setHrAccessType] = useState<'hr' | 'admin'>('hr');
 
   // 2-step HR gateway
   const [hrStep, setHrStep] = useState<'pin' | 'form'>('pin');
@@ -40,7 +42,8 @@ export default function Login() {
     password: '',
     confirmPassword: '',
     roleTitle: '',
-    companyPin: ''
+    companyPin: '',
+    joinCode: ''
   });
 
   const closeModal = () => setModalState(prev => ({ ...prev, isOpen: false }));
@@ -50,7 +53,8 @@ export default function Login() {
     setViewMode(role === 'applicant' ? 'signup' : 'login');
     setHrStep('pin');
     setValidatedCompany(null);
-    setFormData({ name: '', email: '', password: '', confirmPassword: '', roleTitle: '', companyPin: '' });
+    setHrAccessType('hr');
+    setFormData({ name: '', email: '', password: '', confirmPassword: '', roleTitle: '', companyPin: '', joinCode: '' });
   };
 
   const handleBack = () => {
@@ -63,37 +67,50 @@ export default function Login() {
     }
     setSelectedRole(null);
     setHrStep('pin');
+    setHrAccessType('hr');
     setValidatedCompany(null);
     setViewMode('login');
-    setFormData({ name: '', email: '', password: '', confirmPassword: '', roleTitle: '', companyPin: '' });
+    setFormData({ name: '', email: '', password: '', confirmPassword: '', roleTitle: '', companyPin: '', joinCode: '' });
   };
 
   /** Step 1: Validate Company PIN and advance to Step 2 */
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.companyPin.trim()) return;
+    if (hrAccessType === 'admin' && !formData.companyPin.trim()) return;
+    if (hrAccessType === 'hr' && !formData.joinCode.trim()) return;
+    
     setIsLoading(true);
     try {
       const { supabase } = await import('../lib/supabase');
+      
+      const columnToMatch = hrAccessType === 'admin' ? 'company_pin' : 'invite_code';
+      const codeToMatch = hrAccessType === 'admin' ? formData.companyPin : formData.joinCode;
+
       const { data: company, error } = await supabase
         .from('companies')
         .select('id, name, status')
-        .eq('company_pin', formData.companyPin.trim())
+        .eq(columnToMatch, codeToMatch.trim())
         .single();
 
       if (error || !company) {
-        showError('Invalid Company PIN', 'No registered company found with this PIN. Please contact your administrator.');
+        showError(
+          hrAccessType === 'admin' ? 'Invalid Company PIN' : 'Invalid Join Code', 
+          hrAccessType === 'admin' 
+            ? 'No registered company found with this PIN. Please contact your administrator.'
+            : 'The Join Company Code is incorrect. Please check with your administrator.'
+        );
         return;
       }
       if (company.status !== 'approved') {
         showError('Company Pending', `"${company.name}" has not yet been approved by the platform admin. Please check back later.`);
         return;
       }
-      // PIN is valid — advance to Step 2
+      // PIN/Code is valid — advance to Step 2
       setValidatedCompany({ id: company.id, name: company.name });
+      setViewMode('login');
       setHrStep('form');
     } catch (err: any) {
-      showError('Validation Error', err?.message || 'Failed to validate Company PIN. Please try again.');
+      showError('Validation Error', err?.message || 'Failed to validate code. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -287,8 +304,8 @@ export default function Login() {
                 }}>
                   <Building2 size={32} />
                 </div>
-                <h2 className="form-title">Enter Company PIN</h2>
-                <p className="form-subtitle">Enter your company's unique PIN to access the HR portal</p>
+                <h2 className="form-title">HR Portal Access</h2>
+                <p className="form-subtitle">Choose how you want to access the workspace</p>
               </div>
 
               {/* Step indicator */}
@@ -298,25 +315,48 @@ export default function Login() {
                 <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#6b7280' }}>2</div>
               </div>
 
+              {/* Tab Toggle for HR Access Type */}
+              <div style={{
+                display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '10px',
+                padding: '4px', marginBottom: '1.75rem', border: '1px solid rgba(255,255,255,0.06)'
+              }}>
+                {(['hr', 'admin'] as const).map((type) => (
+                  <button key={type} type="button" onClick={() => setHrAccessType(type)}
+                    style={{
+                      flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none',
+                      cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', transition: 'all 0.25s ease',
+                      background: hrAccessType === type ? 'linear-gradient(135deg, #6366f1, #a855f7)' : 'transparent',
+                      color: hrAccessType === type ? 'white' : '#6b7280',
+                      boxShadow: hrAccessType === type ? '0 2px 8px rgba(0,0,0,0.2)' : 'none',
+                    }}>
+                    {type === 'hr' ? 'HR Sign In' : 'Master Admin'}
+                  </button>
+                ))}
+              </div>
+
               <form onSubmit={handlePinSubmit}>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="companyPin">Company PIN</label>
+                  <label className="form-label" htmlFor={hrAccessType === 'admin' ? "companyPin" : "joinCode"}>
+                    {hrAccessType === 'admin' ? 'Company PIN' : 'Join Company Code'}
+                  </label>
                   <div style={{ position: 'relative' }}>
                     <Building2 size={18} style={{ position: 'absolute', top: '50%', left: '1rem', transform: 'translateY(-50%)', color: '#9ca3af' }} />
                     <input
-                      id="companyPin"
+                      id={hrAccessType === 'admin' ? "companyPin" : "joinCode"}
                       type="password"
                       className="form-input"
                       style={{ paddingLeft: '2.5rem', letterSpacing: '0.2em', fontSize: '1.1rem' }}
-                      placeholder="Enter your company PIN"
-                      value={formData.companyPin}
+                      placeholder={hrAccessType === 'admin' ? "Enter master company PIN" : "Enter Join Company Code"}
+                      value={hrAccessType === 'admin' ? formData.companyPin : formData.joinCode}
                       onChange={handleChange}
                       autoFocus
                       required
                     />
                   </div>
                   <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
-                    Your Company PIN was provided by the platform admin upon approval.
+                    {hrAccessType === 'admin' 
+                      ? 'Your Company PIN was provided by the platform admin upon approval.'
+                      : 'Ask your Master Admin for the Join Company Code to access the portal.'}
                   </p>
                 </div>
 
@@ -362,49 +402,57 @@ export default function Login() {
                 </div>
               )}
 
-              {/* Step indicator */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(16,185,129,0.2)', border: '1px solid #10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#10b981' }}>✓</div>
-                <div style={{ flex: 1, height: 2, background: 'linear-gradient(90deg, #10b981, #6366f1)', borderRadius: 2 }} />
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'white' }}>2</div>
-              </div>
+              {/* Step indicator - Only for HR since Applicant is 1-step */}
+              {selectedRole === 'hr' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(16,185,129,0.2)', border: '1px solid #10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#10b981' }}>✓</div>
+                  <div style={{ flex: 1, height: 2, background: 'linear-gradient(90deg, #10b981, #6366f1)', borderRadius: 2 }} />
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'white' }}>2</div>
+                </div>
+              )}
 
               {/* Icon + Title */}
               <div className="form-header">
                 <div className="icon-box" style={{
                   margin: '0 auto 1rem auto',
-                  backgroundColor: 'rgba(99, 102, 241, 0.12)',
-                  color: '#6366f1',
+                  backgroundColor: selectedRole === 'applicant' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(99, 102, 241, 0.12)',
+                  color: selectedRole === 'applicant' ? '#22c55e' : '#6366f1',
                   width: 'fit-content'
                 }}>
-                  <ShieldCheck size={32} />
+                  {selectedRole === 'applicant' ? <User size={32} /> : <ShieldCheck size={32} />}
                 </div>
                 <h2 className="form-title">
-                  {viewMode === 'login' ? 'Recruiter Sign In' : viewMode === 'signup' ? 'Create HR Account' : 'Reset Password'}
+                  {viewMode === 'login' 
+                    ? (selectedRole === 'applicant' ? 'Candidate Sign In' : hrAccessType === 'admin' ? 'Admin Sign In' : 'Recruiter Sign In') 
+                    : viewMode === 'signup' 
+                      ? (selectedRole === 'applicant' ? 'Create Candidate Account' : 'Create HR Account') 
+                      : 'Reset Password'}
                 </h2>
                 <p className="form-subtitle">
-                  {viewMode === 'login' ? 'Enter your credentials to access your workspace' : viewMode === 'signup' ? 'Fill in your details to get started' : 'Enter your email to request a reset link'}
+                  {viewMode === 'login' ? 'Enter your credentials to access your account' : viewMode === 'signup' ? 'Fill in your details to get started' : 'Enter your email to request a reset link'}
                 </p>
               </div>
 
               {/* Tab Toggle */}
-              <div style={{
-                display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '10px',
-                padding: '4px', marginBottom: '1.75rem', border: '1px solid rgba(255,255,255,0.06)'
-              }}>
-                {(['login', 'signup'] as const).map((mode) => (
-                  <button key={mode} type="button" onClick={() => setViewMode(mode)}
-                    style={{
-                      flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none',
-                      cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', transition: 'all 0.25s ease',
-                      background: viewMode === mode ? accentGradient : 'transparent',
-                      color: viewMode === mode ? 'white' : '#6b7280',
-                      boxShadow: viewMode === mode ? '0 2px 8px rgba(0,0,0,0.2)' : 'none',
-                    }}>
-                    {mode === 'login' ? 'Sign In' : 'Sign Up'}
-                  </button>
-                ))}
-              </div>
+              {!(selectedRole === 'hr' && hrAccessType === 'hr') && (
+                <div style={{
+                  display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '10px',
+                  padding: '4px', marginBottom: '1.75rem', border: '1px solid rgba(255,255,255,0.06)'
+                }}>
+                  {(['login', 'signup'] as const).map((mode) => (
+                    <button key={mode} type="button" onClick={() => setViewMode(mode)}
+                      style={{
+                        flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none',
+                        cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', transition: 'all 0.25s ease',
+                        background: viewMode === mode ? accentGradient : 'transparent',
+                        color: viewMode === mode ? 'white' : '#6b7280',
+                        boxShadow: viewMode === mode ? '0 2px 8px rgba(0,0,0,0.2)' : 'none',
+                      }}>
+                      {mode === 'login' ? 'Sign In' : 'Sign Up'}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* ======= LOGIN FORM ======= */}
               {viewMode === 'login' && (

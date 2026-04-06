@@ -69,6 +69,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (user.isAuthenticated) {
+            setLoading(true);
             fetchCompany();
         } else {
             setCompany(null);

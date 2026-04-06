@@ -6,14 +6,14 @@ import { supabase } from '../lib/supabase';
 import { Building2, Users, ArrowRight, Copy, CheckCircle, AlertCircle, Sparkles, Lock, FileText, Search } from 'lucide-react';
 import './CompanySetup.css';
 
-type Mode = 'choose' | 'create' | 'join';
+type Mode = 'create';
 
 export default function CompanySetup() {
     const navigate = useNavigate();
     const { user } = useAuth();
     const { joinCompany, refetch } = useCompany();
 
-    const [mode, setMode] = useState<Mode>('choose');
+    const [mode, setMode] = useState<'create'>('create');
     const [isLoading, setIsLoading] = useState(false);
     const [copied, setCopied] = useState(false);
     const [createdCompany, setCreatedCompany] = useState<{ invite_code: string } | null>(null);
@@ -45,6 +45,21 @@ export default function CompanySetup() {
 
             if (rpcError) throw rpcError;
             if (!inviteCode) throw new Error('Could not retrieve invite code. Please contact support.');
+
+            // Fetch the company ID using the invite code we just got
+            const { data: comp } = await supabase
+                .from('companies')
+                .select('id')
+                .eq('invite_code', inviteCode)
+                .single();
+
+            if (comp) {
+                // Ensure the master admin is proudly linked to this newly created company!
+                await supabase
+                    .from('user_profiles')
+                    .update({ company_id: comp.id })
+                    .eq('id', user.id);
+            }
 
             // Success! We claimed the workspace. Refresh context and set state.
             await refetch();
@@ -92,7 +107,7 @@ export default function CompanySetup() {
                 <div className="company-setup-header">
                     <img src="/logo.png" alt="SmartCruiter" style={{ width: 48, height: 48, borderRadius: 10 }} />
                     <h1>Set Up Your Workspace</h1>
-                    <p>Initialize an approved company workspace or join an existing team.</p>
+                    <p>Initialize an approved company workspace using your Tracking ID.</p>
                 </div>
 
                 {/* Success State — Workspace Claimed */}
@@ -128,29 +143,7 @@ export default function CompanySetup() {
                         </button>
                     </div>
 
-                ) : mode === 'choose' ? (
-                    /* Choice Cards */
-                    <div className="choice-grid">
-                        <div className="choice-card choice-create" onClick={() => setMode('create')}>
-                            <div className="choice-icon">
-                                <Building2 size={32} />
-                            </div>
-                            <h3>Create / Claim Workspace</h3>
-                            <p>Initialize your company workspace after admin approval using your Tracking ID.</p>
-                            <div className="choice-arrow"><ArrowRight size={18} /></div>
-                        </div>
-
-                        <div className="choice-card choice-join" onClick={() => setMode('join')}>
-                            <div className="choice-icon choice-icon-green">
-                                <Users size={32} />
-                            </div>
-                            <h3>Join a Company</h3>
-                            <p>Already have a 1-time invite code from your administrator? Enter it to join your team.</p>
-                            <div className="choice-arrow"><ArrowRight size={18} /></div>
-                        </div>
-                    </div>
-
-                ) : mode === 'create' ? (
+                ) : (
                     /* Claim/Create Workspace using Tracking ID */
                     <div className="setup-card">
                         <div className="card-icon card-icon-purple">
@@ -186,55 +179,11 @@ export default function CompanySetup() {
                             )}
 
                             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                                <button type="button" className="btn-secondary" onClick={() => { setMode('choose'); setError(''); }}>
+                                <button type="button" className="btn-secondary" onClick={() => navigate(-1)}>
                                     Back
                                 </button>
                                 <button type="submit" className="btn-cta" disabled={isLoading} style={{ flex: 1 }}>
                                     {isLoading ? 'Verifying...' : <><Sparkles size={16} /> Verify & Create Workspace</>}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-
-                ) : (
-                    /* Join Form */
-                    <div className="setup-card">
-                        <div className="card-icon card-icon-green">
-                            <Users size={28} />
-                        </div>
-                        <h2>Join Your Team</h2>
-                        <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                            Enter the 1-time generation code your workspace administrator shared with you.
-                        </p>
-
-                        <form onSubmit={handleJoin}>
-                            <div className="field-group">
-                                <label>1-Time Company Code</label>
-                                <input
-                                    id="inviteCode"
-                                    type="text"
-                                    placeholder="e.g. a1b2c3d4"
-                                    value={formData.inviteCode}
-                                    onChange={handleChange}
-                                    style={{ letterSpacing: '0.15rem', textTransform: 'lowercase', textAlign: 'center', fontSize: '1.1rem' }}
-                                    maxLength={16}
-                                    required
-                                    autoFocus
-                                />
-                            </div>
-
-                            {error && (
-                                <div className="error-msg">
-                                    <AlertCircle size={16} /> {error}
-                                </div>
-                            )}
-
-                            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                                <button type="button" className="btn-secondary" onClick={() => { setMode('choose'); setError(''); }}>
-                                    Back
-                                </button>
-                                <button type="submit" className="btn-cta" disabled={isLoading} style={{ flex: 1, background: 'linear-gradient(135deg, #10b981, #059669)' }}>
-                                    {isLoading ? 'Joining...' : <><ArrowRight size={16} /> Join Workspace</>}
                                 </button>
                             </div>
                         </form>

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { jobsApi } from '../services/api';
-import { ArrowLeft, MapPin, Briefcase, Clock, FileText, CheckCircle, ArrowRight } from 'lucide-react';
+import { ArrowLeft, MapPin, Briefcase, Clock, FileText, CheckCircle, ArrowRight, Building } from 'lucide-react';
 import './PublicJobDetail.css';
 import StatusModal from '../components/StatusModal';
+import { supabase } from '../lib/supabase';
 
 interface Job {
   id: string;
@@ -14,11 +15,19 @@ interface Job {
   description?: string;
   requirements?: string;
   status: string;
+  company_id?: string;
+}
+
+interface CompanyDetails {
+  name: string;
+  logo_url?: string;
+  about_us?: string;
 }
 
 export default function PublicJobDetail() {
   const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<Job | null>(null);
+  const [companyDetails, setCompanyDetails] = useState<CompanyDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Modal State
@@ -43,7 +52,20 @@ export default function PublicJobDetail() {
   const loadJob = async () => {
     try {
       const response = await jobsApi.getById(id!);
-      setJob(response.data);
+      const jobData = response.data;
+      setJob(jobData);
+      
+      if (jobData.company_id) {
+         const { data: comp } = await supabase
+           .from('companies')
+           .select('name, logo_url, about_us')
+           .eq('id', jobData.company_id)
+           .single();
+           
+         if (comp) {
+            setCompanyDetails(comp);
+         }
+      }
     } catch (error) {
       console.error('Failed to load job:', error);
     } finally {
@@ -82,6 +104,21 @@ export default function PublicJobDetail() {
 
         <div className="job-card-large">
           <div className="job-header">
+            {companyDetails && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.25rem' }}>
+                {companyDetails.logo_url ? (
+                  <img src={companyDetails.logo_url} alt={companyDetails.name} style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'contain', background: 'white', padding: '4px' }} />
+                ) : (
+                  <div style={{ width: 48, height: 48, borderRadius: 8, background: 'rgba(99,102,241,0.1)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Building size={24} />
+                  </div>
+                )}
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#e5e7eb' }}>{companyDetails.name}</h3>
+                  <span style={{ fontSize: '0.85rem', color: '#9ca3af' }}>is hiring a</span>
+                </div>
+              </div>
+            )}
             <h1 className="job-title-large">{job.title}</h1>
             <div className="job-meta-row">
               {job.department && (
@@ -101,6 +138,17 @@ export default function PublicJobDetail() {
               )}
             </div>
           </div>
+
+          {companyDetails?.about_us && (
+            <div className="job-section">
+              <h2 className="section-title">
+                <Building size={24} className="text-primary" /> About Us
+              </h2>
+              <div className="section-content" style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                {companyDetails.about_us}
+              </div>
+            </div>
+          )}
 
           {job.description && (
             <div className="job-section">

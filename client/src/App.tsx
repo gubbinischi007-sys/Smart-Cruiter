@@ -25,6 +25,8 @@ import Employees from './pages/Employees';
 import RegisterCompany from './pages/RegisterCompany';
 import TrackApplication from './pages/TrackApplication';
 import CompanySetup from './pages/CompanySetup';
+import WorkspaceSettings from './pages/WorkspaceSettings';
+import AdminHub from './pages/AdminHub';
 import { useCompany } from './contexts/CompanyContext';
 import { useAuth } from './contexts/AuthContext';
 import PlatformAdmin from './pages/PlatformAdmin';
@@ -44,6 +46,15 @@ function CompanyGuard({ children }: { children: JSX.Element }) {
   }
 
   return children;
+}
+
+function RoleBasedRedirect() {
+  const { user } = useAuth();
+  const { company } = useCompany();
+  if (company && (company as any).owner_id === user.id) {
+    return <Navigate to="/workspace/hub" replace />;
+  }
+  return <Navigate to="/admin/dashboard" replace />;
 }
 
 function App() {
@@ -71,6 +82,22 @@ function App() {
         </ProtectedRoute>
       } />
 
+      {/* Workspace App Hub & Settings (OUTSIDE standard Layout) */}
+      <Route path="/workspace/hub" element={
+        <ProtectedRoute allowedRole="hr">
+          <CompanyGuard>
+            <AdminHub />
+          </CompanyGuard>
+        </ProtectedRoute>
+      } />
+      <Route path="/workspace/settings" element={
+        <ProtectedRoute allowedRole="hr">
+          <CompanyGuard>
+            <WorkspaceSettings />
+          </CompanyGuard>
+        </ProtectedRoute>
+      } />
+
       {/* Candidate routes */}
       <Route path="/candidate" element={
         <ProtectedRoute allowedRole="applicant">
@@ -93,7 +120,7 @@ function App() {
           </CompanyGuard>
         </ProtectedRoute>
       }>
-        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route index element={<RoleBasedRedirect />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="jobs" element={<Jobs />} />
         <Route path="jobs/new" element={<CreateJob />} />

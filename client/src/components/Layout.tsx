@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Users2, LogOut, History, UserCheck, Calendar, HelpCircle, Building2 } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Users2, LogOut, History, UserCheck, Calendar, HelpCircle, Building2, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { resetOnboarding } from './OnboardingTour';
@@ -22,13 +22,15 @@ export default function Layout() {
     setTourKey(prev => prev + 1); // re-mount to retrigger
   };
 
+  const isMasterAdmin = company ? (company as any).owner_id === user.id : false;
+
   const navLinks = [
     { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/admin/jobs', label: 'Jobs', icon: Briefcase },
     { path: '/admin/applicants', label: 'Applicants', icon: Users2 },
     { path: '/admin/interviews', label: 'Interviews', icon: Calendar },
     { path: '/admin/employees', label: 'Employees', icon: UserCheck },
-    { path: '/admin/history', label: 'History', icon: History },
+    { path: '/admin/history', label: 'History', icon: History }
   ];
 
   return (
