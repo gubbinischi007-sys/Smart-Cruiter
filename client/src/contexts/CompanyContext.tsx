@@ -74,6 +74,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (user.isAuthenticated) {
+            setLoading(true); // Must be sync so CompanyGuard doesn't see loading=false prematurely
             fetchCompany();
         } else {
             setCompany(null);

@@ -7,16 +7,7 @@ import './AdminHub.css';
 export default function AdminHub() {
     const navigate = useNavigate();
     const { user, logout } = useAuth();
-    const { company, loading: companyLoading } = useCompany();
-    const isOwner = company && (company as any).owner_id === user.id;
-
-    if (companyLoading) return null;
-
-    // If not owner but somehow on this page, push to dashboard
-    if (!isOwner) {
-        navigate('/admin/dashboard', { replace: true });
-        return null;
-    }
+    const { company } = useCompany();
 
     return (
         <div className="hub-container animate-fade-in">
@@ -29,9 +20,7 @@ export default function AdminHub() {
                 <div className="hub-user" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                         <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'white', lineHeight: '1.2' }}>{user.name}</span>
-                        <span style={{ fontSize: '0.75rem', color: isOwner ? '#818cf8' : '#10b981', fontWeight: 500 }}>
-                            {isOwner ? 'Master Admin' : (user.roleTitle || 'HR Representative')}
-                        </span>
+                        <span style={{ fontSize: '0.75rem', color: '#818cf8', fontWeight: 500 }}>Master Admin</span>
                     </div>
                     <button onClick={logout} className="logout-btn-hub" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#ef4444', padding: '0.5rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <LogOut size={16} />

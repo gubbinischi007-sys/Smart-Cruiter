@@ -65,23 +65,6 @@ export default function Layout() {
               )}
             </Link>
             <div className="nav-links">
-              {isMasterAdmin && (
-                <Link
-                  to="/workspace/hub"
-                  className="nav-item"
-                  style={{
-                    color: '#818cf8',
-                    border: '1px solid rgba(129, 140, 248, 0.2)',
-                    background: 'rgba(129, 140, 248, 0.05)',
-                    borderRadius: '10px',
-                    marginRight: '12px'
-                  }}
-                >
-                  <Building2 size={16} />
-                  Admin Hub
-                </Link>
-              )}
-
               {navLinks.map((link) => {
                 const isActive = link.path === '/admin/dashboard'
                   ? location.pathname === '/admin/dashboard'

@@ -24,7 +24,7 @@ export default function CompanySetup() {
         }
     }, [company]);
 
-    const [mode, setMode] = useState<'create'>('create');
+    const [mode, setMode] = useState<'create' | 'join'>('join');
     const [isLoading, setIsLoading] = useState(false);
     const [copied, setCopied] = useState(false);
     const [createdCompany, setCreatedCompany] = useState<{ invite_code: string } | null>(null);
@@ -123,8 +123,10 @@ export default function CompanySetup() {
                 {/* Header */}
                 <div className="company-setup-header">
                     <img src="/logo.png" alt="SmartCruiter" style={{ width: 48, height: 48, borderRadius: 10 }} />
-                    <h1>Set Up Your Workspace</h1>
-                    <p>Initialize an approved company workspace using your Tracking ID.</p>
+                    <h1>{mode === 'create' ? 'Set Up Your Workspace' : 'Join Your Company'}</h1>
+                    <p>{mode === 'create' 
+                        ? 'Initialize an approved company workspace using your Tracking ID.' 
+                        : 'Enter the 1-time invite code provided by your Master Admin to join your team.'}</p>
                 </div>
 
                 {/* Success State — Workspace Claimed */}
@@ -160,7 +162,7 @@ export default function CompanySetup() {
                         </button>
                     </div>
 
-                ) : (
+                ) : mode === 'create' ? (
                     /* Claim/Create Workspace using Tracking ID */
                     <div className="setup-card">
                         <div className="card-icon card-icon-purple">
@@ -204,6 +206,65 @@ export default function CompanySetup() {
                                 </button>
                             </div>
                         </form>
+                        
+                        <div style={{ marginTop: '2rem', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1.5rem' }}>
+                            <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.75rem' }}>Are you a regular HR team member?</p>
+                            <button onClick={() => setMode('join')} style={{ background: 'none', border: 'none', color: '#818cf8', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>
+                                Use a 1-Time Invite Code instead
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    /* Join Workspace using Invite Code */
+                    <div className="setup-card">
+                        <div className="card-icon card-icon-green">
+                            <Users size={28} />
+                        </div>
+                        <h2>Join Workspace</h2>
+                        <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                            Enter the <strong>1-Time Invite Code</strong> you received from your administrator to securely join your company's HR portal.
+                        </p>
+
+                        <form onSubmit={handleJoin}>
+                            <div className="field-group">
+                                <label>1-Time Invite Code</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Lock size={18} style={{ position: 'absolute', top: '50%', left: '1rem', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+                                    <input
+                                        id="inviteCode"
+                                        type="text"
+                                        placeholder="e.g. COMP-XYZ789"
+                                        style={{ textTransform: 'uppercase', paddingLeft: '2.5rem' }}
+                                        value={formData.inviteCode}
+                                        onChange={handleChange}
+                                        required
+                                        autoFocus
+                                    />
+                                </div>
+                            </div>
+
+                            {error && (
+                                <div className="error-msg">
+                                    <AlertCircle size={16} /> {error}
+                                </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                                <button type="button" className="btn-secondary" onClick={() => navigate(-1)}>
+                                    Back
+                                </button>
+                                <button type="submit" className="btn-cta" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', flex: 1 }} disabled={isLoading}>
+                                    {isLoading ? 'Joining...' : <><Users size={16} /> Join Company</>}
+                                </button>
+                            </div>
+                        </form>
+
+                        <div style={{ marginTop: '2rem', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1.5rem' }}>
+                            <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.75rem' }}>Are you the Master Admin?</p>
+                            <button onClick={() => setMode('create')} style={{ background: 'none', border: 'none', color: '#10b981', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>
+                                Use a Tracking ID to initialize workspace
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
