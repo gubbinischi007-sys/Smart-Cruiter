@@ -12,6 +12,7 @@ interface Company {
     plan: string;
     status: string;
     document_url?: string;
+    owner_id?: string;
 }
 
 interface CompanyContextType {
@@ -36,7 +37,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     }, [company?.id]);
 
     const fetchCompany = async () => {
+        // Keep loading: true throughout the full async journey
+        setLoading(true);
+
         if (!user.id || user.role !== 'hr') {
+            setCompany(null);
             setLoading(false);
             return;
         }
@@ -69,7 +74,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (user.isAuthenticated) {
-            setLoading(true);
             fetchCompany();
         } else {
             setCompany(null);

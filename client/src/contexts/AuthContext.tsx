@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase, authService, AppUser } from '../lib/supabase';
+import { setUserRole } from '../services/api';
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -51,10 +52,12 @@ function syncLocalStorage(profile: AppUser) {
     role: profile.role,
     isAuthenticated: true,
   }));
+  setUserRole(profile.role);
 }
 function clearLocalStorage() {
   localStorage.removeItem('user');
   localStorage.removeItem('lastSessionId');
+  setUserRole(null);
 }
 
 // ─────────────────────────────────────────────────────────

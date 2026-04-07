@@ -1,7 +1,7 @@
 import { ArrowLeft, Share2, Linkedin, MessageCircle, Copy, Check } from 'lucide-react';
 import { useEffect, useState, FormEvent } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { jobsApi, applicantsApi, analyticsApi, interviewsApi } from '../services/api';
+import { jobsApi, applicantsApi, analyticsApi, interviewsApi, emailApi } from '../services/api';
 import { logAction } from '../utils/historyLogger';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import ConfirmationModal from '../components/ConfirmationModal';
@@ -117,7 +117,6 @@ export default function JobDetail() {
       confirmLabel: `Accept ${selectedApplicants.size} Applicants`,
       onConfirm: async () => {
         try {
-          const { emailApi } = await import('../services/api');
           await emailApi.sendBulkAcceptance(Array.from(selectedApplicants));
           logAction(`Bulk accepted ${selectedApplicants.size} applicants`);
           setStatusModal({
@@ -161,7 +160,6 @@ export default function JobDetail() {
       confirmLabel: `Reject ${selectedApplicants.size} Applicants`,
       onConfirm: async () => {
         try {
-          const { emailApi } = await import('../services/api');
           await emailApi.sendBulkRejection(Array.from(selectedApplicants));
           logAction(`Bulk rejected ${selectedApplicants.size} applicants`);
           setStatusModal({

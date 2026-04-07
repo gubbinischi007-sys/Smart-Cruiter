@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../contexts/CompanyContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,7 +11,18 @@ type Mode = 'create';
 export default function CompanySetup() {
     const navigate = useNavigate();
     const { user } = useAuth();
-    const { joinCompany, refetch } = useCompany();
+    const { company, joinCompany, refetch } = useCompany();
+
+    // If user already has a company workspace, send them there — don't show setup
+    useEffect(() => {
+        if (company) {
+            if ((company as any).owner_id === user.id) {
+                navigate('/workspace/hub', { replace: true });
+            } else {
+                navigate('/admin/dashboard', { replace: true });
+            }
+        }
+    }, [company]);
 
     const [mode, setMode] = useState<'create'>('create');
     const [isLoading, setIsLoading] = useState(false);
@@ -59,6 +70,12 @@ export default function CompanySetup() {
                     .from('user_profiles')
                     .update({ company_id: comp.id })
                     .eq('id', user.id);
+
+                // Initialize the owner of the company
+                await supabase
+                    .from('companies')
+                    .update({ owner_id: user.id })
+                    .eq('id', comp.id);
             }
 
             // Success! We claimed the workspace. Refresh context and set state.
@@ -138,8 +155,8 @@ export default function CompanySetup() {
                             Your colleagues will enter this exact code when choosing "Join a Company". Keep it safe!
                         </p>
 
-                        <button className="btn-cta" onClick={() => navigate('/admin/dashboard')}>
-                            Enter Dashboard <ArrowRight size={16} />
+                        <button className="btn-cta" onClick={() => navigate('/workspace/hub')}>
+                            Enter Admin Hub <ArrowRight size={16} />
                         </button>
                     </div>
 

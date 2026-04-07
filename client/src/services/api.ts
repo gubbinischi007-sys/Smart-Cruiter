@@ -17,6 +17,14 @@ export const setCompanyId = (companyId: string | null) => {
   }
 };
 
+export const setUserRole = (role: string | null) => {
+  if (role) {
+    api.defaults.headers.common['x-user-role'] = role;
+  } else {
+    delete api.defaults.headers.common['x-user-role'];
+  }
+};
+
 
 // Jobs API
 export const jobsApi = {
@@ -133,5 +141,16 @@ export const historyApi = {
   clearAll: () => api.delete('/history'),
 };
 
+// HR Team API (Master Admin only)
+export const hrTeamApi = {
+  getAll: () => api.get('/hr-team'),
+  create: (data: { name: string; email: string; password: string; role_title?: string }) =>
+    api.post('/hr-team', data),
+  suspend: (id: string) => api.patch(`/hr-team/${id}/suspend`),
+  reactivate: (id: string) => api.patch(`/hr-team/${id}/reactivate`),
+  delete: (id: string) => api.delete(`/hr-team/${id}`),
+};
+
 export default api;
+
 

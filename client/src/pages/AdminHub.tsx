@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Building2, LayoutDashboard, Settings as SettingsIcon, LogOut, ArrowRight } from 'lucide-react';
+import { Building2, LayoutDashboard, Settings as SettingsIcon, LogOut, ArrowRight, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import './AdminHub.css';
@@ -62,6 +62,20 @@ export default function AdminHub() {
                         </p>
                         <div className="hub-action" style={{ color: '#f472b6', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             Manage Settings <ArrowRight size={18} />
+                        </div>
+                    </div>
+
+                    {/* Portal 3: HR Team Management */}
+                    <div className="hub-card portal-hr-team" onClick={() => navigate('/workspace/hr-team')}>
+                        <div className="hub-icon-wrapper hr-team-icon">
+                            <Users size={32} />
+                        </div>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'white', margin: '0 0 0.5rem 0' }}>HR Team Management</h2>
+                        <p style={{ color: '#9ca3af', margin: '0 0 2rem 0', flex: 1, lineHeight: '1.6' }}>
+                            Create HR accounts, manage team access, and instantly suspend or remove departing employees from the portal.
+                        </p>
+                        <div className="hub-action" style={{ color: '#34d399', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            Manage HR Team <ArrowRight size={18} />
                         </div>
                     </div>
                 </div>

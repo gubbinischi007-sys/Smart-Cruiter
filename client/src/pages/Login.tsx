@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { authService } from '../lib/supabase';
+import { authService, supabase } from '../lib/supabase';
 import {
   User, ArrowRight, ShieldCheck, Sparkles, ChevronLeft,
   Lock, Mail, CheckCircle, Briefcase, Eye, EyeOff, AlertCircle, Building2
@@ -81,8 +81,6 @@ export default function Login() {
     
     setIsLoading(true);
     try {
-      const { supabase } = await import('../lib/supabase');
-      
       const columnToMatch = hrAccessType === 'admin' ? 'company_pin' : 'invite_code';
       const codeToMatch = hrAccessType === 'admin' ? formData.companyPin : formData.joinCode;
 

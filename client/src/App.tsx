@@ -27,6 +27,7 @@ import TrackApplication from './pages/TrackApplication';
 import CompanySetup from './pages/CompanySetup';
 import WorkspaceSettings from './pages/WorkspaceSettings';
 import AdminHub from './pages/AdminHub';
+import HRTeamManagement from './pages/HRTeamManagement';
 import { useCompany } from './contexts/CompanyContext';
 import { useAuth } from './contexts/AuthContext';
 import PlatformAdmin from './pages/PlatformAdmin';
@@ -36,12 +37,13 @@ import ClaimWorkspace from './pages/ClaimWorkspace';
 
 /** Redirects HR users without a company to the company setup page */
 function CompanyGuard({ children }: { children: JSX.Element }) {
-  const { user } = useAuth();
-  const { company, loading } = useCompany();
+  const { user, loading: authLoading } = useAuth();
+  const { company, loading: companyLoading } = useCompany();
 
-  if (loading) return null;
+  // Wait for BOTH auth AND company to finish loading before making any redirect decision
+  if (authLoading || companyLoading) return null;
 
-  if (user.isAuthenticated && user.role !== 'super_admin' && !company && !loading) {
+  if (user.isAuthenticated && user.role !== 'super_admin' && !company) {
     return <Navigate to="/company-setup" replace />;
   }
 
@@ -50,7 +52,11 @@ function CompanyGuard({ children }: { children: JSX.Element }) {
 
 function RoleBasedRedirect() {
   const { user } = useAuth();
-  const { company } = useCompany();
+  const { company, loading: companyLoading } = useCompany();
+
+  // Don't redirect until company is loaded
+  if (companyLoading) return null;
+
   if (company && (company as any).owner_id === user.id) {
     return <Navigate to="/workspace/hub" replace />;
   }
@@ -94,6 +100,13 @@ function App() {
         <ProtectedRoute allowedRole="hr">
           <CompanyGuard>
             <WorkspaceSettings />
+          </CompanyGuard>
+        </ProtectedRoute>
+      } />
+      <Route path="/workspace/hr-team" element={
+        <ProtectedRoute allowedRole="hr">
+          <CompanyGuard>
+            <HRTeamManagement />
           </CompanyGuard>
         </ProtectedRoute>
       } />
