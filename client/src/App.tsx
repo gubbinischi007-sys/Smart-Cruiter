@@ -63,6 +63,21 @@ function RoleBasedRedirect() {
   return <Navigate to="/admin/dashboard" replace />;
 }
 
+function MasterAdminGuard({ children }: { children: JSX.Element }) {
+  const { user } = useAuth();
+  const { company, loading: companyLoading } = useCompany();
+
+  // Wait for company loading
+  if (companyLoading) return null;
+
+  // Only allow company owner (Master Admin)
+  if (!company || (company as any).owner_id !== user.id) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
+  return children;
+}
+
 function App() {
   return (
     <Routes>
@@ -92,21 +107,27 @@ function App() {
       <Route path="/workspace/hub" element={
         <ProtectedRoute allowedRole="hr">
           <CompanyGuard>
-            <AdminHub />
+            <MasterAdminGuard>
+              <AdminHub />
+            </MasterAdminGuard>
           </CompanyGuard>
         </ProtectedRoute>
       } />
       <Route path="/workspace/settings" element={
         <ProtectedRoute allowedRole="hr">
           <CompanyGuard>
-            <WorkspaceSettings />
+            <MasterAdminGuard>
+              <WorkspaceSettings />
+            </MasterAdminGuard>
           </CompanyGuard>
         </ProtectedRoute>
       } />
       <Route path="/workspace/hr-team" element={
         <ProtectedRoute allowedRole="hr">
           <CompanyGuard>
-            <HRTeamManagement />
+            <MasterAdminGuard>
+              <HRTeamManagement />
+            </MasterAdminGuard>
           </CompanyGuard>
         </ProtectedRoute>
       } />
