@@ -5,11 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import nodemailer from 'nodemailer';
 import multer from 'multer';
-import { createRequire } from 'module';
-
-const nodeRequire = createRequire(import.meta.url);
-const pdfParseModule = nodeRequire('pdf-parse');
-const pdfParse: (buffer: Buffer) => Promise<{ text: string }> = typeof pdfParseModule === 'function' ? pdfParseModule : pdfParseModule.default;
+import pdf from 'pdf-parse';
 
 dotenv.config();
 
@@ -19,15 +15,6 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUz
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 const upload = multer({ storage: multer.memoryStorage() });
-
-// Helper for complex queries via RPC (SELECT only)
-async function sql<T = any>(query: string, params: any[] = []): Promise<T[]> {
-    let idx = 0;
-    const pg = query.replace(/\?/g, () => `$${++idx}`);
-    const { data, error } = await sb.rpc('exec_sql_returning', { query: pg, params: params.map(String) });
-    if (error) throw error;
-    return (data || []) as T[];
-}
 
 // ── Email ─────────────────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
@@ -81,7 +68,7 @@ api.get('/jobs', async (req: any, res: any) => {
         if (req.query.status) q = q.eq('status', req.query.status);
         if (companyId) q = q.eq('company_id', companyId);
         const { data, error } = await q;
-        if (error) throw error;
+        if (error) throw new Error(error.message);
         res.json(data || []);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -89,7 +76,7 @@ api.get('/jobs', async (req: any, res: any) => {
 api.get('/jobs/:id', async (req: any, res: any) => {
     try {
         const { data, error } = await sb.from('jobs').select('*').eq('id', req.params.id).single();
-        if (error) return res.status(404).json({ error: 'Job not found' });
+        if (error) throw new Error(error.message);
         res.json(data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -97,41 +84,26 @@ api.get('/jobs/:id', async (req: any, res: any) => {
 api.post('/jobs', async (req: any, res: any) => {
     try {
         const companyId = req.headers['x-company-id'];
-        if (!companyId) return res.status(400).json({ error: 'Company ID is required' });
+        if (!companyId) return res.status(400).json({ error: 'Company ID missing from request headers.' });
 
         const { title, department, location, type, description, requirements, status } = req.body;
-        if (!title) return res.status(400).json({ error: 'Job title is required' });
+        if (!title) return res.status(400).json({ error: 'Job title is required.' });
 
-        // Verify company status (must be approved to post jobs)
-        const { data: comp, error: compErr } = await sb.from('companies').select('status').eq('id', companyId).single();
-        if (compErr || !comp) return res.status(404).json({ error: 'Company not found' });
-        if (comp.status !== 'approved') {
-            return res.status(403).json({ error: 'Action restricted. Your company must be verified by a platform administrator before posting jobs.' });
+        const { data: comp } = await sb.from('companies').select('status').eq('id', companyId).single();
+        if (!comp || comp.status !== 'approved') {
+            return res.status(403).json({ error: 'Your company profile needs platform admin approval before you can post jobs.' });
         }
 
         const now = new Date().toISOString();
         const { data, error } = await sb.from('jobs').insert({
-            id: uuidv4(), title, 
-            department: department || null, 
-            location: location || null,
-            type: type || null, 
-            description: description || null, 
-            requirements: requirements || null,
-            status: status || 'open', 
-            company_id: companyId, 
-            created_at: now, 
-            updated_at: now
+            id: uuidv4(), title, department: department || null, location: location || null,
+            type: type || null, description: description || null, requirements: requirements || null,
+            status: status || 'open', company_id: companyId, created_at: now, updated_at: now
         }).select().single();
 
-        if (error) {
-            console.error('Job Create Error:', error);
-            throw error;
-        }
+        if (error) throw new Error(error.message);
         res.status(201).json(data);
-    } catch (e: any) { 
-        console.error('API Error /jobs:', e);
-        res.status(500).json({ error: e.message || 'Internal Server Error' }); 
-    }
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 api.put('/jobs/:id', async (req: any, res: any) => {
@@ -140,7 +112,7 @@ api.put('/jobs/:id', async (req: any, res: any) => {
         for (const f of ['title', 'department', 'location', 'type', 'description', 'requirements', 'status'])
             if (req.body[f] !== undefined) updates[f] = req.body[f];
         const { data, error } = await sb.from('jobs').update(updates).eq('id', req.params.id).select().single();
-        if (error) throw error;
+        if (error) throw new Error(error.message);
         res.json(data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -149,7 +121,7 @@ api.delete('/jobs/:id', async (req: any, res: any) => {
     try {
         await sb.from('applicants').delete().eq('job_id', req.params.id);
         const { error } = await sb.from('jobs').delete().eq('id', req.params.id);
-        if (error) throw error;
+        if (error) throw new Error(error.message);
         res.status(204).send();
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -166,7 +138,7 @@ api.get('/applicants', async (req: any, res: any) => {
         if (status) q = q.eq('status', status);
         if (companyId) q = q.eq('jobs.company_id', companyId);
         const { data, error } = await q;
-        if (error) throw error;
+        if (error) throw new Error(error.message);
 
         const { data: jobs } = await sb.from('jobs').select('id, title');
         const jobsMap = Object.fromEntries((jobs || []).map((j: any) => [j.id, j.title]));
@@ -178,7 +150,7 @@ api.get('/applicants', async (req: any, res: any) => {
 api.get('/applicants/:id', async (req: any, res: any) => {
     try {
         const { data, error } = await sb.from('applicants').select('*').eq('id', req.params.id).single();
-        if (error) return res.status(404).json({ error: 'Applicant not found' });
+        if (error) throw new Error(error.message);
         let jobDetails = {};
         if (data.job_id) {
             const { data: job } = await sb.from('jobs').select('title, department, location').eq('id', data.job_id).single();
@@ -196,7 +168,7 @@ api.post('/applicants', upload.single('resume'), async (req: any, res: any) => {
         let actualPdfText = '';
         if (req.file) {
             try {
-                const parsed = await pdfParse(req.file.buffer);
+                const parsed = await pdf(req.file.buffer);
                 actualPdfText = parsed.text || '';
             } catch (err) { console.error("PDF parse error:", err); }
         }
@@ -214,7 +186,7 @@ api.post('/applicants', upload.single('resume'), async (req: any, res: any) => {
             stage: 'applied', status: 'active', applied_at: now, updated_at: now
         }).select().single();
 
-        if (error) throw error;
+        if (error) throw new Error(error.message);
 
         // ---- AI SCORING ----
         const resumeUrlLower = (resume_url || '').toLowerCase();
@@ -246,11 +218,12 @@ api.post('/applicants', upload.single('resume'), async (req: any, res: any) => {
             await sb.from('applicants').update({ status: 'rejected', stage: 'rejected', rejection_reason: reason }).eq('id', id);
             await sendEmail({
                 to: email, subject: `Update regarding your application for ${job.title}`,
-                html: `<p>Hi ${first_name},</p><p>Thank you for applying. At this time we are moving forward with other candidates who more closely match the technical requirements.</p><p><strong>Feedback:</strong> ${reason}</p><p>Best of luck!</p>`
+                html: `<p>Hi ${first_name},</p><p>Thank you for applying for the ${job.title} position. After reviewing your profile against the technical requirements, we have decided not to move forward with your application.</p><p><strong>Reasoning:</strong> ${reason}</p><p>We appreciate your interest in us.</p>`
             });
         } else if (score >= 90) {
             await sb.from('applicants').update({ stage: 'shortlisted' }).eq('id', id);
         }
+
         res.status(201).json(data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -261,61 +234,8 @@ api.put('/applicants/:id', async (req: any, res: any) => {
         for (const f of ['first_name', 'last_name', 'email', 'phone', 'resume_url', 'cover_letter', 'stage', 'status'])
             if (req.body[f] !== undefined) updates[f] = req.body[f];
         const { data, error } = await sb.from('applicants').update(updates).eq('id', req.params.id).select().single();
-        if (error) throw error;
+        if (error) throw new Error(error.message);
         res.json(data);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.post('/applicants/bulk-update-stage', async (req: any, res: any) => {
-    try {
-        const { applicant_ids, stage } = req.body;
-        if (!Array.isArray(applicant_ids) || !stage) return res.status(400).json({ error: 'applicant_ids and stage required' });
-        const { error } = await sb.from('applicants').update({ stage, updated_at: new Date().toISOString() }).in('id', applicant_ids);
-        if (error) throw error;
-        res.json({ message: `Updated ${applicant_ids.length} applicants` });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.delete('/applicants/:id', async (req: any, res: any) => {
-    try {
-        const { error } = await sb.from('applicants').delete().eq('id', req.params.id);
-        if (error) throw error;
-        res.status(204).send();
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.patch('/applicants/:id/offer', async (req: any, res: any) => {
-    try {
-        const { salary, joining_date, notes, rules } = req.body;
-        const now = new Date().toISOString();
-        const { data: existing } = await sb.from('applicants').select('*').eq('id', req.params.id).single();
-        if (!existing) return res.status(404).json({ error: 'Applicant not found' });
-        let jobTitle = 'Unknown Job';
-        if (existing.job_id) {
-            const { data: job } = await sb.from('jobs').select('title').eq('id', existing.job_id).single();
-            if (job) jobTitle = job.title;
-        }
-        const { data, error } = await sb.from('applicants').update({
-            offer_salary: salary, offer_joining_date: joining_date, offer_notes: notes,
-            offer_rules: rules, offer_status: 'pending', offer_sent_at: now, updated_at: now
-        }).eq('id', req.params.id).select().single();
-        if (error) throw error;
-        await sendEmail({
-            to: existing.email, subject: 'Job Offer from Smart-Cruiter',
-            html: `<h2>Congratulations ${existing.first_name}!</h2><p>We are thrilled to offer you the position of <strong>${jobTitle}</strong>.</p>Offer Details:<ul><li><strong>Annual Salary:</strong> ${salary}</li><li><strong>Joining Date:</strong> ${joining_date}</li></ul><p>Best regards, The Smart-Cruiter Team</p>`
-        });
-        res.json(data);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.post('/applicants/:id/offer-response', async (req: any, res: any) => {
-    try {
-        const { response } = req.body;
-        if (response !== 'accepted' && response !== 'rejected') return res.status(400).json({ error: 'Invalid response' });
-        const stage = response === 'accepted' ? 'hired' : 'declined';
-        const { error } = await sb.from('applicants').update({ offer_status: response, stage, updated_at: new Date().toISOString() }).eq('id', req.params.id);
-        if (error) throw error;
-        res.json({ message: `Offer ${response}`, stage });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
@@ -329,10 +249,10 @@ api.post('/emails/bulk-acceptance', async (req: any, res: any) => {
             html: `<p>Hi ${a.first_name}, you've been accepted for ${a.jobs?.title}.</p>`
         }));
         res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) { res.status(500).json({ error: e.message || 'Bulk acceptance failed' }); }
 });
 
-// ANALYTICS & OTHERS (Simplified)
+// ANALYTICS
 api.get('/analytics/dashboard', async (req: any, res: any) => {
     try {
         const { count: jobs } = await sb.from('jobs').select('*', { count: 'exact', head: true });
@@ -350,15 +270,15 @@ api.get('/platform/status', async (req: any, res: any) => {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// HR TEAM
+// HR TEAM & INVITES
 api.get('/hr-team', async (req: any, res: any) => {
     try {
         const companyId = req.headers['x-company-id'];
-        const { data } = await sb.from('hr_team').select('*').eq('company_id', companyId);
-        const { data: pending } = await sb.from('hr_invitations').select('*').eq('company_id', companyId).eq('status', 'pending');
+        const { data: hr } = await sb.from('hr_team').select('*').eq('company_id', companyId);
+        const { data: inv } = await sb.from('hr_invitations').select('*').eq('company_id', companyId).eq('status', 'pending');
         const rows = [
-            ...(data || []).map(u => ({ ...u, status: u.status || 'active' })),
-            ...(pending || []).map(inv => ({ id: inv.id, name: 'Invited Member', email: inv.email, role_title: inv.role_title, status: 'Pending' }))
+            ...(hr || []).map(u => ({ ...u, status: u.status || 'active' })),
+            ...(inv || []).map(i => ({ id: i.id, name: 'Invited Member', email: i.email, role_title: i.role_title, status: 'Pending' }))
         ];
         res.json(rows);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -373,24 +293,16 @@ api.delete('/hr-team/:id', async (req: any, res: any) => {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// HR INVITES
 api.post('/hr-invites/send', async (req: any, res: any) => {
     try {
         const { email, role_title } = req.body;
         const company_id = req.headers['x-company-id'];
         const token = uuidv4();
-        await sb.from('hr_invitations').insert({ id: uuidv4(), email, role_title, company_id, token, status: 'pending', created_at: new Date().toISOString() });
+        const { error } = await sb.from('hr_invitations').insert({ id: uuidv4(), email, role_title, company_id, token, status: 'pending', created_at: new Date().toISOString() });
+        if (error) throw new Error(error.message);
         const url = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/accept-invite?token=${token}`;
         await sendEmail({ to: email, subject: 'Invite to Join HR Team', html: `<p>You've been invited. <a href="${url}">Click here to accept</a></p>` });
         res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.get('/hr-invites/verify/:token', async (req: any, res: any) => {
-    try {
-        const { data } = await sb.from('hr_invitations').select('*').eq('token', req.params.token).eq('status', 'pending').single();
-        if (!data) return res.status(404).json({ error: 'Invite not found or expired' });
-        res.json(data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
