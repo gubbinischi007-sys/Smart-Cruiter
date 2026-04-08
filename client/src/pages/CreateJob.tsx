@@ -66,7 +66,8 @@ export default function CreateJob() {
 
     } catch (error: any) {
       console.error('Failed to create job:', error);
-      const serverError = error.response?.data?.error || error.message;
+      let serverError = error.response?.data?.error || error.message;
+      if (typeof serverError === 'object') serverError = JSON.stringify(serverError);
       setStatusModal({
         isOpen: true,
         title: 'Error',
