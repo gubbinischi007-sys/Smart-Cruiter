@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService, supabase } from '../lib/supabase';
-import { sendOTPWithResend } from '../lib/emailService';
+
 import {
   User, ArrowRight, ShieldCheck, Sparkles, ChevronLeft,
   Lock, Mail, CheckCircle, Briefcase, Eye, EyeOff, AlertCircle, Building2
