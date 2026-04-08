@@ -77,23 +77,9 @@ api.get('/health', (_req: any, res: any) => res.json({ status: 'ok', db: 'supaba
 api.get('/jobs', async (req: any, res: any) => {
     try {
         const companyId = req.headers['x-company-id'];
-        const status = req.query.status;
-        
-        // Base query
         let q = sb.from('jobs').select('*').order('created_at', { ascending: false });
-        
-        if (status) {
-            q = q.eq('status', status);
-            // If it's the public candidate view (status=open), we usually want ALL jobs
-            // so we only apply company filter if it's NOT just the public view
-            if (status !== 'open' && companyId) {
-                q = q.eq('company_id', companyId);
-            }
-        } else if (companyId) {
-            // If no status but companyId provided (Admin side), filter by company
-            q = q.eq('company_id', companyId);
-        }
-
+        if (req.query.status) q = q.eq('status', req.query.status);
+        if (companyId) q = q.eq('company_id', companyId);
         const { data, error } = await q;
         if (error) throw error;
         res.json(data || []);
@@ -111,16 +97,41 @@ api.get('/jobs/:id', async (req: any, res: any) => {
 api.post('/jobs', async (req: any, res: any) => {
     try {
         const companyId = req.headers['x-company-id'];
+        if (!companyId) return res.status(400).json({ error: 'Company ID is required' });
+
         const { title, department, location, type, description, requirements, status } = req.body;
+        if (!title) return res.status(400).json({ error: 'Job title is required' });
+
+        // Verify company status (must be approved to post jobs)
+        const { data: comp, error: compErr } = await sb.from('companies').select('status').eq('id', companyId).single();
+        if (compErr || !comp) return res.status(404).json({ error: 'Company not found' });
+        if (comp.status !== 'approved') {
+            return res.status(403).json({ error: 'Action restricted. Your company must be verified by a platform administrator before posting jobs.' });
+        }
+
         const now = new Date().toISOString();
         const { data, error } = await sb.from('jobs').insert({
-            id: uuidv4(), title, department: department || null, location: location || null,
-            type: type || null, description: description || null, requirements: requirements || null,
-            status: status || 'open', company_id: companyId || null, created_at: now, updated_at: now
+            id: uuidv4(), title, 
+            department: department || null, 
+            location: location || null,
+            type: type || null, 
+            description: description || null, 
+            requirements: requirements || null,
+            status: status || 'open', 
+            company_id: companyId, 
+            created_at: now, 
+            updated_at: now
         }).select().single();
-        if (error) throw error;
+
+        if (error) {
+            console.error('Job Create Error:', error);
+            throw error;
+        }
         res.status(201).json(data);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) { 
+        console.error('API Error /jobs:', e);
+        res.status(500).json({ error: e.message || 'Internal Server Error' }); 
+    }
 });
 
 api.put('/jobs/:id', async (req: any, res: any) => {
