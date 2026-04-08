@@ -72,34 +72,35 @@ export async function sendBulkEmails<T>(
     errors: [],
   };
 
-  for (const recipient of recipients) {
-    try {
-      const emailOptions = getEmailOptions(recipient);
-      const recipientEmail = (recipient as any).email;
+  if (recipients.length === 0) return result;
 
-      if (!recipientEmail) {
-        result.failed++;
-        result.errors.push({
-          email: 'unknown',
-          error: 'No email address found',
-        });
-        continue;
-      }
+  const emailPromises = recipients.map(async (recipient) => {
+    const emailOptions = getEmailOptions(recipient);
+    const recipientEmail = (recipient as any).email;
 
-      await sendEmail({
-        ...emailOptions,
-        to: recipientEmail,
-      });
+    if (!recipientEmail) {
+      throw new Error('No email address found');
+    }
 
+    return sendEmail({
+      ...emailOptions,
+      to: recipientEmail,
+    });
+  });
+
+  const results = await Promise.allSettled(emailPromises);
+
+  results.forEach((res, index) => {
+    if (res.status === 'fulfilled') {
       result.successful++;
-    } catch (error: any) {
+    } else {
       result.failed++;
       result.errors.push({
-        email: (recipient as any).email || 'unknown',
-        error: error.message || 'Unknown error',
+        email: (recipients[index] as any).email || 'unknown',
+        error: res.reason?.message || 'Unknown error',
       });
     }
-  }
+  });
 
   return result;
 }

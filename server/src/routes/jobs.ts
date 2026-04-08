@@ -5,6 +5,7 @@ import { Job, CreateJobInput, UpdateJobInput } from '../models/job.js';
 import { sendBulkEmails } from '../services/email.js';
 import { Applicant } from '../models/applicant.js';
 import { logHrAction } from '../services/activityLogger.js';
+import { supabase } from '../lib/supabase.js';
 
 const router = express.Router();
 
@@ -165,13 +166,22 @@ router.put('/:id', async (req, res) => {
 // Delete job
 router.delete('/:id', async (req, res) => {
   try {
-    const job = await get<Job>('SELECT * FROM jobs WHERE id = ?', [req.params.id]);
-    if (!job) {
+    // 1. Fetch job details first for the email
+    const { data: job, error: jobError } = await supabase
+      .from('jobs')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (jobError || !job) {
       return res.status(404).json({ error: 'Job not found' });
     }
 
-    // Fetch all applicants for this job
-    const applicants = await all<Applicant>('SELECT * FROM applicants WHERE job_id = ?', [req.params.id]);
+    // 2. Fetch all applicants for this job
+    const { data: applicants } = await supabase
+      .from('applicants')
+      .select('*')
+      .eq('job_id', req.params.id);
 
     if (applicants && applicants.length > 0) {
       console.log(`Sending job closure emails to ${applicants.length} applicants for job: ${job.title}`);
@@ -191,10 +201,13 @@ router.delete('/:id', async (req, res) => {
       }));
     }
 
-    // Delete the job
-    await run('DELETE FROM jobs WHERE id = ?', [req.params.id]);
-    // Also cleanup applicants if not handled by DB constraint
-    await run('DELETE FROM applicants WHERE job_id = ?', [req.params.id]);
+    // 3. Delete from Supabase
+    const { error: deleteError } = await supabase
+      .from('jobs')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (deleteError) throw deleteError;
 
     // Log action
     await logHrAction(req, `Deleted job: ${job.title}`);

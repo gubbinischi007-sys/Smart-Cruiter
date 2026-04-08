@@ -321,24 +321,24 @@
 }
 
 /* View - indigo hover */
-.action-btn:nth-child(1):hover {
+.action-btn.view:hover {
     color: #c7d2fe;
     background: rgba(99, 102, 241, 0.3);
     border-color: rgba(99, 102, 241, 0.6);
 }
 
-.action-btn:nth-child(1):hover svg {
+.action-btn.view:hover svg {
     color: #c7d2fe !important;
 }
 
 /* Edit - sky hover */
-.action-btn:nth-child(2):hover {
+.action-btn.edit:hover {
     color: #bae6fd;
     background: rgba(56, 189, 248, 0.25);
     border-color: rgba(56, 189, 248, 0.6);
 }
 
-.action-btn:nth-child(2):hover svg {
+.action-btn.edit:hover svg {
     color: #bae6fd !important;
 }
 
