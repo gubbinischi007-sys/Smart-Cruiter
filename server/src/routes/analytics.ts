@@ -1,5 +1,5 @@
 import express from 'express';
-import { get, all } from '../database.js';
+import { supabase } from '../lib/supabase.js';
 
 const router = express.Router();
 
@@ -7,58 +7,114 @@ const router = express.Router();
 router.get('/dashboard', async (req, res) => {
   try {
     const companyId = req.headers['x-company-id'] as string;
-    const jobFilter = companyId ? 'WHERE company_id = ?' : '';
-    const jobStatusFilter = companyId ? 'WHERE status = ? AND company_id = ?' : 'WHERE status = ?';
-    const applicantFilter = companyId ? 'WHERE job_id IN (SELECT id FROM jobs WHERE company_id = ?)' : '';
-    const interviewFilter = companyId ? "AND job_id IN (SELECT id FROM jobs WHERE company_id = ?)" : "";
-    const applicantTimeFilter = companyId
-      ? "WHERE applied_at >= datetime('now', '-30 days') AND job_id IN (SELECT id FROM jobs WHERE company_id = ?)"
-      : "WHERE applied_at >= datetime('now', '-30 days')";
+    
+    if (!companyId) {
+      return res.status(400).json({ error: 'Company ID is required' });
+    }
 
-    const cIdArr = companyId ? [companyId] : [];
-    const statusArr = companyId ? ['open', companyId] : ['open'];
+    // Parallel fetch for dashboard data using Supabase native methods
+    const [
+      jobsRes,
+      applicantsRes,
+      recentApplicantsRes,
+      interviewsListRes,
+      interviewsCountRes,
+    ] = await Promise.all([
+      // 1. Get all jobs for counts and graph
+      supabase.from('jobs')
+        .select('id, title, status, applicants(id)')
+        .eq('company_id', companyId),
+      
+      // 2. Get total applicants by stage
+      supabase.from('applicants')
+        .select('id, stage, applied_at')
+        .in('job_id', await (async () => {
+          const { data } = await supabase.from('jobs').select('id').eq('company_id', companyId);
+          return data?.map(j => j.id) || [];
+        })()),
 
-    const results = await Promise.allSettled([
-      get<{ count: string }>(`SELECT COUNT(*) as count FROM jobs ${jobFilter}`, cIdArr),
-      get<{ count: string }>(`SELECT COUNT(*) as count FROM jobs ${jobStatusFilter}`, statusArr),
-      get<{ count: string }>(`SELECT COUNT(*) as count FROM applicants ${applicantFilter}`, cIdArr),
-      all<{ stage: string; count: number }>(`SELECT stage, COUNT(*) as count FROM applicants ${applicantFilter} GROUP BY stage`, cIdArr),
-      all<{ job_id: string; job_title: string; count: number }>(
-        `SELECT j.id as job_id, j.title as job_title, COUNT(a.id) as count
-         FROM jobs j
-         LEFT JOIN applicants a ON j.id = a.job_id
-         ${jobFilter}
-         GROUP BY j.id, j.title
-         ORDER BY count DESC
-         LIMIT 10`,
-        cIdArr
-      ),
-      get<{ count: string }>(`SELECT COUNT(*) as count FROM applicants ${applicantTimeFilter}`, cIdArr),
-      get<{ count: string }>(`SELECT COUNT(*) as count FROM interviews WHERE status = 'scheduled' AND scheduled_at >= date('now') ${interviewFilter}`, cIdArr),
-      // NEW: Compact lists for dashboard
-      all<any>(`SELECT a.*, j.title as job_title FROM applicants a LEFT JOIN jobs j ON a.job_id = j.id ${applicantFilter} ORDER BY a.applied_at DESC LIMIT 5`, cIdArr),
-      all<any>(`SELECT i.*, a.first_name || ' ' || a.last_name as applicant_name, j.title as job_title FROM interviews i LEFT JOIN applicants a ON i.applicant_id = a.id LEFT JOIN jobs j ON i.job_id = j.id WHERE i.status = 'scheduled' AND i.scheduled_at >= date('now') ${interviewFilter} ORDER BY i.scheduled_at ASC LIMIT 5`, cIdArr)
+      // 3. Recent applications (with job titles)
+      supabase.from('applicants')
+        .select('*, jobs(title)')
+        .in('job_id', await (async () => {
+          const { data } = await supabase.from('jobs').select('id').eq('company_id', companyId);
+          return data?.map(j => j.id) || [];
+        })())
+        .order('applied_at', { ascending: false })
+        .limit(5),
+
+      // 4. Upcoming interviews (List)
+      supabase.from('interviews')
+        .select(`
+          *,
+          applicants (first_name, last_name),
+          jobs (title)
+        `)
+        .gte('scheduled_at', new Date().toISOString())
+        .eq('status', 'scheduled')
+        .in('job_id', await (async () => {
+          const { data } = await supabase.from('jobs').select('id').eq('company_id', companyId);
+          return data?.map(j => j.id) || [];
+        })())
+        .order('scheduled_at', { ascending: true })
+        .limit(5),
+
+      // 5. Scheduled Interviews Total (Count)
+      supabase.from('interviews')
+        .select('*', { count: 'exact', head: true })
+        .gte('scheduled_at', new Date().toISOString())
+        .eq('status', 'scheduled')
+        .in('job_id', await (async () => {
+          const { data } = await supabase.from('jobs').select('id').eq('company_id', companyId);
+          return data?.map(j => j.id) || [];
+        })())
     ]);
 
-    // Helper to get result or default
-    const val = (index: number, def: any) => results[index].status === 'fulfilled' ? (results[index] as any).value : def;
+    const jobs = jobsRes.data || [];
+    const applicants = applicantsRes.data || [];
+    const recentApplications = recentApplicantsRes.data?.map(app => ({
+      ...app,
+      job_title: app.jobs?.title
+    })) || [];
+    
+    const upcomingInterviews = interviewsListRes.data?.map(int => ({
+      ...int,
+      applicant_name: int.applicants ? `${int.applicants.first_name} ${int.applicants.last_name}` : 'Unknown Candidate',
+      job_title: int.jobs?.title
+    })) || [];
 
-    const totalJobs = val(0, { count: '0' });
-    const openJobs = val(1, { count: '0' });
-    const totalApplicants = val(2, { count: '0' });
-    const applicantsByStage = val(3, []);
-    const applicantsByJob = val(4, []);
-    const recentApplicantsTotal = val(5, { count: '0' });
-    const scheduledInterviewsTotal = val(6, { count: '0' });
-    const recentApplications = val(7, []);
-    const upcomingInterviews = val(8, []);
+    // Aggregates
+    const totalJobs = jobs.length;
+    const openJobs = jobs.filter(j => j.status === 'open').length;
+    const totalApplicants = applicants.length;
+
+    // Applicants by stage
+    const stages = ['applied', 'shortlisted', 'recommended', 'hired', 'declined', 'withdrawn'];
+    const applicantsByStage = stages.map(stage => ({
+      stage,
+      count: applicants.filter(a => a.stage === stage).length
+    }));
+
+    // Applicants by job (for the graph)
+    const applicantsByJob = jobs.map(j => ({
+      job_id: j.id,
+      job_title: j.title,
+      count: j.applicants ? j.applicants.length : 0
+    })).sort((a, b) => b.count - a.count).slice(0, 10);
+
+    // Recent applicants (30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentApplicantsTotal = applicants.filter(a => new Date(a.applied_at) >= thirtyDaysAgo).length;
+
+    const scheduledInterviewsTotal = interviewsCountRes.count || 0;
 
     res.json({
-      totalJobs: parseInt(totalJobs?.count || '0'),
-      openJobs: parseInt(openJobs?.count || '0'),
-      totalApplicants: parseInt(totalApplicants?.count || '0'),
-      recentApplicants: parseInt(recentApplicantsTotal?.count || '0'),
-      scheduledInterviews: parseInt(scheduledInterviewsTotal?.count || '0'),
+      totalJobs,
+      openJobs,
+      totalApplicants,
+      recentApplicants: recentApplicantsTotal,
+      scheduledInterviews: scheduledInterviewsTotal,
       applicantsByStage,
       applicantsByJob,
       recentApplications,
@@ -74,26 +130,24 @@ router.get('/dashboard', async (req, res) => {
 router.get('/applicants-by-stage', async (req, res) => {
   try {
     const companyId = req.headers['x-company-id'] as string;
-    const applicantFilter = companyId ? 'WHERE job_id IN (SELECT id FROM jobs WHERE company_id = ?)' : '';
-    const cIdArr = companyId ? [companyId] : [];
+    if (!companyId) return res.status(400).json({ error: 'Company ID required' });
 
-    const data = await all<{ stage: string; count: number }>(
-      `SELECT stage, COUNT(*) as count
-       FROM applicants
-       ${applicantFilter}
-       GROUP BY stage
-       ORDER BY
-         CASE stage
-           WHEN 'applied' THEN 1
-           WHEN 'shortlisted' THEN 2
-           WHEN 'recommended' THEN 3
-           WHEN 'hired' THEN 4
-           WHEN 'declined' THEN 5
-           WHEN 'withdrawn' THEN 6
-           ELSE 7
-         END`
-    );
-    res.json(data);
+    // Nested subquery via .in() because of simplified RLS/schema
+    const { data: jobIds } = await supabase.from('jobs').select('id').eq('company_id', companyId);
+    const ids = jobIds?.map(j => j.id) || [];
+
+    const { data: applicants } = await supabase
+      .from('applicants')
+      .select('stage')
+      .in('job_id', ids);
+
+    const stages = ['applied', 'shortlisted', 'recommended', 'hired', 'declined', 'withdrawn'];
+    const result = stages.map(stage => ({
+      stage,
+      count: applicants?.filter(a => a.stage === stage).length || 0
+    }));
+
+    res.json(result);
   } catch (error) {
     console.error('Error fetching applicants by stage:', error);
     res.status(500).json({ error: 'Failed to fetch applicants by stage' });
@@ -105,21 +159,30 @@ router.get('/applicants-over-time', async (req, res) => {
   try {
     const days = parseInt(req.query.days as string) || 30;
     const companyId = req.headers['x-company-id'] as string;
+    if (!companyId) return res.status(400).json({ error: 'Company ID required' });
 
-    const timeFilter = `applied_at >= date('now', ?)`;
-    const companyFilter = companyId ? `AND job_id IN (SELECT id FROM jobs WHERE company_id = ?)` : '';
-    const queryParams = companyId ? [`-${days} days`, companyId] : [`-${days} days`];
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - days);
 
-    // SQLite: cast to date
-    const data = await all<{ date: string; count: number }>(
-      `SELECT DATE(applied_at) as date, COUNT(*) as count
-       FROM applicants
-       WHERE ${timeFilter} ${companyFilter}
-       GROUP BY DATE(applied_at)
-       ORDER BY date ASC`,
-      queryParams
-    );
-    res.json(data);
+    const { data: jobIds } = await supabase.from('jobs').select('id').eq('company_id', companyId);
+    const ids = jobIds?.map(j => j.id) || [];
+
+    const { data: applicants } = await supabase
+      .from('applicants')
+      .select('applied_at')
+      .in('job_id', ids)
+      .gte('applied_at', thirtyDaysAgo.toISOString())
+      .order('applied_at', { ascending: true });
+
+    // Group by date in JS
+    const grouped = applicants?.reduce((acc: any, curr) => {
+      const date = new Date(curr.applied_at).toISOString().split('T')[0];
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    }, {});
+
+    const result = Object.entries(grouped || {}).map(([date, count]) => ({ date, count }));
+    res.json(result);
   } catch (error) {
     console.error('Error fetching applicants over time:', error);
     res.status(500).json({ error: 'Failed to fetch applicants over time' });
@@ -131,16 +194,24 @@ router.get('/job-stats/:jobId', async (req, res) => {
   try {
     const { jobId } = req.params;
 
-    const [totalApplicants, applicantsByStage, interviews] = await Promise.all([
-      get<{ count: string }>('SELECT COUNT(*) as count FROM applicants WHERE job_id = ?', [jobId]),
-      all<{ stage: string; count: number }>('SELECT stage, COUNT(*) as count FROM applicants WHERE job_id = ? GROUP BY stage', [jobId]),
-      get<{ count: string }>('SELECT COUNT(*) as count FROM interviews WHERE job_id = ?', [jobId])
+    const [applicantsRes, interviewsRes] = await Promise.all([
+      supabase.from('applicants').select('stage').eq('job_id', jobId),
+      supabase.from('interviews').select('id', { count: 'exact', head: true }).eq('job_id', jobId)
     ]);
 
+    const applicants = applicantsRes.data || [];
+    const totalApplicants = applicants.length;
+    
+    const stages = ['applied', 'shortlisted', 'recommended', 'hired', 'declined', 'withdrawn'];
+    const applicantsByStage = stages.map(stage => ({
+      stage,
+      count: applicants.filter(a => a.stage === stage).length
+    }));
+
     res.json({
-      totalApplicants: parseInt(totalApplicants?.count || '0'),
+      totalApplicants,
       applicantsByStage,
-      totalInterviews: parseInt(interviews?.count || '0'),
+      totalInterviews: interviewsRes.count || 0,
     });
   } catch (error) {
     console.error('Error fetching job statistics:', error);

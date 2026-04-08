@@ -66,7 +66,7 @@ export default function Login() {
 
   const handleRoleSelect = (role: 'hr' | 'applicant') => {
     setSelectedRole(role);
-    setViewMode(role === 'applicant' ? 'signup' : 'login');
+    setViewMode('login');
     setHrStep('pin');
     setValidatedCompany(null);
     setHrAccessType('hr');
@@ -199,11 +199,13 @@ export default function Login() {
         roleTitle: formData.roleTitle.trim() || undefined,
       });
 
-      // HR goes to CompanySetup to manage/join their workspace
+      // Successfully registered
       if (profile.role === 'hr') {
         navigate('/company-setup');
       } else {
-        navigate('/candidate/dashboard');
+        showSuccess('Account Created!', 'Your candidate account has been successfully created. Please sign in to continue.');
+        setViewMode('login');
+        setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
       }
     } catch (err: any) {
       const msg = err?.message || 'Registration failed. Please try again.';
