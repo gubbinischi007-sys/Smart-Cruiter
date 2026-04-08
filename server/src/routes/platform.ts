@@ -77,10 +77,10 @@ router.get('/status', async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
     
-    // 1. Find user profile to get company_id
+    // 1. Find user profile
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('company_id, email, role')
+      .select('company_id, email, role, id')
       .eq('email', email)
       .single();
 
@@ -89,8 +89,8 @@ router.get('/status', async (req, res) => {
       return res.status(404).json({ error: 'Company link not found for this user' });
     }
 
-    // 2. Fetch company status
-    const { data: company, error: companyError } = await supabase
+    // 2. Fetch the current linked company
+    let { data: company, error: companyError } = await supabase
       .from('companies')
       .select('*')
       .eq('id', profile.company_id)
@@ -99,6 +99,32 @@ router.get('/status', async (req, res) => {
     if (companyError || !company) {
       console.error(`[Platform] Linked company not found: ${profile.company_id}`);
       return res.status(404).json({ error: 'Company not found' });
+    }
+
+    // 3. SMART AUTO-LINK LOGIC: 
+    // If current company isn't approved, but another company with the SAME name IS approved:
+    // This happens if a user registered a company but their profile got linked to a dummy record first.
+    if (company.status?.toLowerCase() !== 'approved') {
+      const { data: approvedMatch } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('name', company.name)
+        .eq('status', 'approved')
+        .maybeSingle();
+
+      if (approvedMatch && approvedMatch.id !== company.id) {
+        console.log(`[Platform SmartLink] Migrating user ${email} from ${company.id} to Approved company ${approvedMatch.id} (${approvedMatch.name})`);
+        
+        // Relink the user profile to the correct approved record
+        const { error: patchError } = await supabase
+          .from('user_profiles')
+          .update({ company_id: approvedMatch.id })
+          .eq('id', profile.id);
+
+        if (!patchError) {
+          company = approvedMatch; // Return the approved one instead!
+        }
+      }
     }
 
     console.log(`[Platform Status] User: ${email}, Company: ${company.name}, Status: ${company.status}`);
