@@ -80,11 +80,12 @@ router.get('/status', async (req, res) => {
     // 1. Find user profile to get company_id
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('company_id')
+      .select('company_id, email, role')
       .eq('email', email)
       .single();
 
     if (profileError || !profile?.company_id) {
+      console.warn(`[Platform] No company linked for user: ${email}`);
       return res.status(404).json({ error: 'Company link not found for this user' });
     }
 
@@ -96,8 +97,11 @@ router.get('/status', async (req, res) => {
       .single();
 
     if (companyError || !company) {
+      console.error(`[Platform] Linked company not found: ${profile.company_id}`);
       return res.status(404).json({ error: 'Company not found' });
     }
+
+    console.log(`[Platform Status] User: ${email}, Company: ${company.name}, Status: ${company.status}`);
     res.json(company);
   } catch (error) {
     console.error('Error fetching company status:', error);
