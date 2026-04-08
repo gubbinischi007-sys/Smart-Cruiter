@@ -32,32 +32,60 @@ export default function MatchScoreModal({ isOpen, score, applicantName, candidat
 
     if (!isOpen) return null;
 
-    let skillMatch = Math.round(score * 0.511);
-    let expMatch = Math.round(score * 0.284);
-    let eduMatch = Math.round(score * 0.114);
-    let kwMatch = score - skillMatch - expMatch - eduMatch;
-
-    if (data && data.scoreBreakdown) {
-        skillMatch = data.scoreBreakdown.skillMatch;
-        expMatch = data.scoreBreakdown.expMatch;
-        eduMatch = data.scoreBreakdown.eduMatch;
-        kwMatch = data.scoreBreakdown.keywordMatch;
-        score = data.scoreBreakdown.total;
-    }
+    let skillMatch = data?.scoreBreakdown?.skillMatch || 0;
+    let expMatch = data?.scoreBreakdown?.expMatch || 0;
+    let eduMatch = data?.scoreBreakdown?.eduMatch || 0;
+    let kwMatch = data?.scoreBreakdown?.keywordMatch || 0;
+    let finalScore = data?.scoreBreakdown?.total || score;
 
     const categories = [
-        { label: 'Skill Match', max: 51, value: skillMatch, icon: <Target size={16} className="text-blue-400" />, color: 'bg-blue-500' },
-        { label: 'Experience Match', max: 28, value: expMatch, icon: <Briefcase size={16} className="text-purple-400" />, color: 'bg-purple-500' },
-        { label: 'Education Match', max: 11, value: eduMatch, icon: <BookOpen size={16} className="text-green-400" />, color: 'bg-green-500' },
+        { label: 'Skill Match', max: 50, value: skillMatch, icon: <Target size={16} className="text-blue-400" />, color: 'bg-blue-500' },
+        { label: 'Experience Match', max: 30, value: expMatch, icon: <Briefcase size={16} className="text-purple-400" />, color: 'bg-purple-500' },
+        { label: 'Education Match', max: 10, value: eduMatch, icon: <BookOpen size={16} className="text-green-400" />, color: 'bg-green-500' },
         { label: 'Keyword Strength', max: 10, value: kwMatch, icon: <Key size={16} className="text-yellow-400" />, color: 'bg-yellow-500' },
     ];
 
     return (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-            <div style={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '1rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', width: '100%', maxWidth: '28rem', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+        <div style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0, 
+            zIndex: 9999,
+            display: 'flex', 
+            alignItems: 'flex-start',
+            justifyContent: 'center', 
+            backgroundColor: 'rgba(15, 23, 42, 0.5)', // Lighter, native-feeling overlay
+            backdropFilter: 'blur(3px)', // Subtle blur for focus without 'minimizing' feel
+            padding: '80px 20px 40px 20px',
+            overflowY: 'auto'
+        }}>
+            <div style={{ 
+                backgroundColor: '#1e293b', 
+                border: '1px solid rgba(255,255,255,0.2)', 
+                borderRadius: '1.25rem', 
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)', 
+                width: '100%', 
+                maxWidth: '32rem', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                maxHeight: 'calc(100vh - 120px)',
+                overflow: 'hidden',
+                animation: 'modalEntrance 0.3s ease-out', // Simpler, non-shrinking animation
+                flexShrink: 0
+            }}>
 
                 {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(15,23,42,0.5)' }}>
+                <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    padding: '1.5rem', 
+                    borderBottom: '1px solid rgba(255,255,255,0.1)', 
+                    backgroundColor: 'rgba(15,23,42,0.5)',
+                    flexShrink: 0 // Prevents header from shrinking
+                }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ padding: '0.5rem', backgroundColor: 'rgba(99,102,241,0.2)', borderRadius: '0.5rem', color: '#818cf8', display: 'flex' }}>
                             <Brain size={20} />
@@ -67,26 +95,30 @@ export default function MatchScoreModal({ isOpen, score, applicantName, candidat
                             <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.125rem' }}>{applicantName}</p>
                         </div>
                     </div>
-                    <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.25rem', borderRadius: '0.25rem', display: 'flex' }}>
+                    <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.5rem', display: 'flex', transition: 'all 0.2s' }}>
                         <X size={20} />
                     </button>
                 </div>
 
                 {/* Body */}
-                <div style={{ padding: '1.5rem', overflowY: 'auto' }}>
+                <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, scrollbarWidth: 'thin' }}>
                     {loading ? (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2.5rem 0' }}>
                             <div style={{ width: '2.5rem', height: '2.5rem', border: '4px solid rgba(99,102,241,0.3)', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '1rem' }} />
                             <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: 0 }}>Analyzing candidate profile...</p>
                         </div>
                     ) : data ? (() => {
-                        let dynamicStatus = 'Poor Match';
+                        let dynamicStatus = 'Rejected';
                         if (data.status === 'Conflict') {
                             dynamicStatus = 'Conflict';
-                        } else if (score >= 80) {
+                        } else if (finalScore >= 90) {
                             dynamicStatus = 'Verified';
-                        } else if (score >= 50) {
-                            dynamicStatus = 'Review Needed';
+                        } else if (finalScore >= 81) {
+                            dynamicStatus = 'Recommended';
+                        } else if (finalScore >= 51) {
+                            dynamicStatus = 'Applied';
+                        } else {
+                            dynamicStatus = 'Rejected';
                         }
 
                         return (
@@ -95,14 +127,27 @@ export default function MatchScoreModal({ isOpen, score, applicantName, candidat
                                 {/* Validation Status */}
                                 <div style={{
                                     padding: '1rem', borderRadius: '0.75rem', border: '1px solid', display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
-                                    backgroundColor: dynamicStatus === 'Verified' ? 'rgba(16,185,129,0.1)' : dynamicStatus === 'Conflict' || dynamicStatus === 'Poor Match' ? 'rgba(239,68,68,0.1)' : 'rgba(234,179,8,0.1)',
-                                    borderColor: dynamicStatus === 'Verified' ? 'rgba(16,185,129,0.2)' : dynamicStatus === 'Conflict' || dynamicStatus === 'Poor Match' ? 'rgba(239,68,68,0.2)' : 'rgba(234,179,8,0.2)',
-                                    color: dynamicStatus === 'Verified' ? '#34d399' : dynamicStatus === 'Conflict' || dynamicStatus === 'Poor Match' ? '#f87171' : '#fbbf24'
+                                    backgroundColor: 
+                                        dynamicStatus === 'Verified' ? 'rgba(16,185,129,0.1)' : 
+                                        dynamicStatus === 'Recommended' ? 'rgba(99,102,241,0.1)' :
+                                        dynamicStatus === 'Applied' ? 'rgba(245,158,11,0.1)' : 
+                                        'rgba(239,68,68,0.1)',
+                                    borderColor: 
+                                        dynamicStatus === 'Verified' ? 'rgba(16,185,129,0.2)' : 
+                                        dynamicStatus === 'Recommended' ? 'rgba(99,102,241,0.2)' :
+                                        dynamicStatus === 'Applied' ? 'rgba(245,158,11,0.2)' : 
+                                        'rgba(239,68,68,0.2)',
+                                    color: 
+                                        dynamicStatus === 'Verified' ? '#34d399' : 
+                                        dynamicStatus === 'Recommended' ? '#818cf8' :
+                                        dynamicStatus === 'Applied' ? '#fbbf24' : 
+                                        '#f87171'
                                 }}>
                                     <div style={{ marginTop: '0.125rem', display: 'flex' }}>
                                         {dynamicStatus === 'Verified' ? <CheckCircle size={18} /> :
-                                            dynamicStatus === 'Conflict' || dynamicStatus === 'Poor Match' ? <AlertTriangle size={18} /> :
-                                                <Info size={18} />}
+                                            dynamicStatus === 'Recommended' ? <Target size={18} /> :
+                                                dynamicStatus === 'Applied' ? <Info size={18} /> :
+                                                    <AlertTriangle size={18} />}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                         <span style={{ fontWeight: '600', fontSize: '0.875rem' }}>Status: {dynamicStatus}</span>
@@ -207,10 +252,18 @@ export default function MatchScoreModal({ isOpen, score, applicantName, candidat
                 </div>
 
                 {/* Footer */}
-                <div style={{ padding: '1.25rem', borderTop: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(15,23,42,0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: '600', color: '#cbd5e1' }}>Total Match Score</span>
-                    <div style={{ fontSize: '1.875rem', fontWeight: '900', color: '#34d399', lineHeight: 1 }}>
-                        {loading ? '--' : score}%
+                <div style={{ 
+                    padding: '1.25rem 1.75rem', 
+                    borderTop: '1px solid rgba(255,255,255,0.1)', 
+                    backgroundColor: 'rgba(15,23,42,0.3)', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    flexShrink: 0 // Keep footer visible at all times
+                }}>
+                    <span style={{ fontWeight: '600', color: '#cbd5e1', fontSize: '1rem' }}>Total Match Score</span>
+                    <div style={{ fontSize: '1.875rem', fontWeight: '900', color: '#34d399', lineHeight: 1, letterSpacing: '-0.025em' }}>
+                        {loading ? '--' : finalScore}%
                     </div>
                 </div>
             </div >
@@ -220,6 +273,10 @@ export default function MatchScoreModal({ isOpen, score, applicantName, candidat
                     @keyframes spin {
                         from { transform: rotate(0deg); }
                         to { transform: rotate(360deg); }
+                    }
+                    @keyframes modalEntrance {
+                        from { opacity: 0; transform: translateY(-10px); }
+                        to { opacity: 1; transform: translateY(0); }
                     }
                 `}
             </style>

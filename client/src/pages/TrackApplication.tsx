@@ -22,6 +22,7 @@ interface StatusData {
     admin_bg_checked?: boolean;
     admin_doc_verified_at?: string;
     admin_bg_checked_at?: string;
+    job_title?: string;
 }
 
 const STATUS_CONFIG: Record<StatusString, { label: string; color: string; bg: string; border: string; icon: JSX.Element }> = {
@@ -65,32 +66,66 @@ const STATUS_CONFIG: Record<StatusString, { label: string; color: string; bg: st
 export default function TrackApplication() {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
-    const [statusData, setStatusData] = useState<StatusData | null>(null);
+    const [statusData, setStatusData] = useState<any>(null);
+    const [isApplicant, setIsApplicant] = useState(false);
     const [error, setError] = useState('');
     const [trackingId, setTrackingId] = useState('');
     const [copied, setCopied] = useState(false);
 
     const handleSearch = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (!trackingId.trim()) return;
+        const tid = trackingId.trim().toUpperCase();
+        if (!tid) return;
 
         setIsLoading(true);
         setError('');
+        setIsApplicant(tid.startsWith('APP-'));
 
         try {
-            const { data, error: rpcError } = await supabase.rpc('get_application_status', {
-                p_tracking_id: trackingId.trim().toUpperCase()
-            });
+            if (tid.startsWith('APP-')) {
+                // APPLICANT SEARCH
+                const { data, error: appError } = await supabase
+                    .from('applicants')
+                    .select('*, jobs(title)')
+                    .eq('tracking_id', tid)
+                    .single();
 
-            if (rpcError) throw rpcError;
-            if (!data) {
-                setError('No application found with that Tracking ID. Please double-check and try again.');
-                return;
+                if (appError || !data) {
+                    setError('No job application found with that ID.');
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Map applicant data to tracker status format
+                const mappedData: StatusData = {
+                    id: data.id,
+                    name: `${data.first_name} ${data.last_name}`,
+                    status: (data.stage === 'hired' ? 'approved' : 
+                             data.stage === 'rejected' ? 'rejected' : 
+                             data.stage === 'applied' ? 'pending' : 'reviewing') as StatusString,
+                    rejection_reason: data.rejection_reason,
+                    created_at: data.applied_at || data.created_at,
+                    updated_at: data.updated_at,
+                    tracking_id: data.tracking_id,
+                    job_title: data.jobs?.title
+                };
+                setStatusData(mappedData);
+
+            } else {
+                // COMPANY SEARCH
+                const { data, error: rpcError } = await supabase.rpc('get_application_status', {
+                    p_tracking_id: tid
+                });
+
+                if (rpcError) throw rpcError;
+                if (!data) {
+                    setError('No company registration found with that ID.');
+                    return;
+                }
+                setStatusData(data);
             }
-
-            setStatusData(data);
         } catch (err: any) {
-            setError(err?.message || 'Failed to retrieve application status. Please try again.');
+            setError(err?.message || 'Failed to retrieve status.');
         } finally {
             setIsLoading(false);
         }
@@ -107,12 +142,10 @@ export default function TrackApplication() {
                 {
                     event: 'UPDATE',
                     schema: 'public',
-                    table: 'companies',
+                    table: isApplicant ? 'applicants' : 'companies',
                     filter: `id=eq.${statusData.id}`,
                 },
-                async (payload) => {
-                    // When any change happens, re-fetch via RPC to get the full formatted StatusData
-                    console.log('Realtime change detected, refreshing...', payload);
+                () => {
                     handleSearch();
                 }
             )
@@ -121,7 +154,7 @@ export default function TrackApplication() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [statusData?.id]);
+    }, [statusData?.id, isApplicant]);
 
     const formatDate = (dateString?: string) => {
         if (!dateString) return 'Date unknown';
@@ -142,51 +175,59 @@ export default function TrackApplication() {
     const getStageDate = (stepIndex: number, status: StatusString, created_at?: string): { label: string; color: string } | null => {
         if (!created_at) return null;
         const submitted = new Date(created_at);
-        const reviewStart = new Date(submitted.getTime() + 2 * 60 * 60 * 1000);   // +2 hrs
-        const decision   = new Date(submitted.getTime() + 24 * 60 * 60 * 1000);  // +24 hrs
-
         const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-        if (stepIndex === 0) {
-            // Always show actual submission time
-            return { label: fmt(submitted), color: '#10b981' };
+        if (stepIndex === 0) return { label: fmt(submitted), color: '#10b981' };
+        
+        // For applicants, we show placeholders or actual decision times
+        if (isApplicant) {
+            if (statusData.status === 'approved' || statusData.status === 'rejected') {
+                if (stepIndex === 3) return { label: fmt(new Date(statusData.updated_at)), color: statusData.status === 'approved' ? '#10b981' : '#ef4444' };
+            }
+             return { label: `In progress...`, color: '#475569' };
         }
+
+        // Company Logic
         if (stepIndex === 1) {
-            // Document Verification
             return statusData.admin_doc_verified && statusData.admin_doc_verified_at
                 ? { label: `${fmt(new Date(statusData.admin_doc_verified_at))}`, color: '#10b981' }
-                : { label: `Review expected within 1–2 business days`, color: '#475569' };
+                : { label: `Review expected within 1–2 days`, color: '#475569' };
         }
         if (stepIndex === 2) {
-            // Background check
             return statusData.admin_bg_checked && statusData.admin_bg_checked_at
                 ? { label: `${fmt(new Date(statusData.admin_bg_checked_at))}`, color: '#10b981' }
-                : { label: `Typically takes 2–3 business days`, color: '#475569' };
+                : { label: `Processing...`, color: '#475569' };
         }
         if (stepIndex === 3) {
-            // Final decision
             if (['approved', 'rejected', 'needs_info'].includes(status)) {
-                const decisionTime = statusData.updated_at ? new Date(statusData.updated_at) : decision;
-                return { label: `${fmt(decisionTime)}`, color: status === 'approved' ? '#10b981' : status === 'rejected' ? '#ef4444' : '#f59e0b' };
+                return { label: `${fmt(new Date(statusData.updated_at))}`, color: status === 'approved' ? '#10b981' : '#ef4444' };
             }
-            return { label: `Usually issued within 1–2 business days`, color: '#475569' };
+            return { label: `Awaiting decision`, color: '#475569' };
         }
         return null;
     };
 
     const getStageIndex = (status: StatusString): number => {
-        if (status === 'pending')   return 1; // step 0 active = received
-        if (status === 'reviewing') return 3; // step 1 done (doc), step 2 active (bg check)
-        return 4; // final decision active or all done
+        if (status === 'pending')   return 1;
+        if (status === 'reviewing') return 3;
+        return 4;
     };
 
-    const stages = [
-        { label: 'Application Received',   desc: 'Your registration form was securely received.',          statuses: ['pending','reviewing','approved','rejected','needs_info'] },
-        { label: 'Document Verification',  desc: 'Admin is checking your submitted business documents.',    statuses: ['reviewing','approved','rejected','needs_info'] },
-        { label: 'Background Check',       desc: 'Company background and entity legitimacy validation.',    statuses: ['approved','rejected','needs_info'] },
-        { label: 'Final Decision',         desc: 'Platform team issues an approval or denial.',             statuses: ['approved','rejected','needs_info'] },
+    const appStages = [
+        { label: 'Application Submitted', desc: 'Resume and profile received by hiring team.', statuses: ['pending', 'reviewing', 'approved', 'rejected'] },
+        { label: 'Resume AI Match',      desc: 'Smart-Match analyzing skills and experience.', statuses: ['reviewing', 'approved', 'rejected'] },
+        { label: 'Interview Process',     desc: 'Technical assessment and cultural interview.', statuses: ['reviewing', 'approved', 'rejected'] },
+        { label: 'Final Selection',       desc: 'Decision issued by the platform hiring team.', statuses: ['approved', 'rejected'] },
     ];
 
+    const companyStages = [
+        { label: 'Form Received',          desc: 'Registration form securely received.', statuses: ['pending', 'reviewing', 'approved', 'rejected'] },
+        { label: 'Document Review',        desc: 'Verification of business entity documents.', statuses: ['reviewing', 'approved', 'rejected'] },
+        { label: 'Entity Validation',     desc: 'Background check on company legitimacy.', statuses: ['approved', 'rejected'] },
+        { label: 'Verification Result',   desc: 'Platform issues an approval or denial.', statuses: ['approved', 'rejected'] },
+    ];
+
+    const currentStages = isApplicant ? appStages : companyStages;
     const cfg = statusData ? STATUS_CONFIG[statusData.status] : null;
 
     return (
@@ -313,24 +354,25 @@ export default function TrackApplication() {
                             </h3>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 0, position: 'relative' }}>
-                                {stages.map((stage, i) => {
+                                {currentStages.map((stage, i) => {
                                     const status = statusData.status;
 
                                     // Unified logic for the 4-step progress tracker
                                     const isComplete = (
                                         (i === 0) || // Application is always 'Received' if tracking
-                                        (i === 1 && (statusData.admin_doc_verified || ['approved','rejected','needs_info'].includes(status))) ||
-                                        (i === 2 && (statusData.admin_bg_checked || ['approved','rejected','needs_info'].includes(status))) ||
+                                        (i === 1 && (statusData.admin_doc_verified || ['approved','rejected','needs_info'].includes(status) || isApplicant)) ||
+                                        (i === 2 && (statusData.admin_bg_checked || ['approved','rejected','needs_info'].includes(status) || (isApplicant && status === 'reviewing'))) ||
                                         (i === 3 && ['approved','rejected','needs_info'].includes(status))
                                     );
 
                                     const isActive = !isComplete && (
-                                        (i === 1 && !statusData.admin_doc_verified) ||
-                                        (i === 2 && statusData.admin_doc_verified && !statusData.admin_bg_checked) ||
-                                        (i === 3 && statusData.admin_bg_checked && status === 'reviewing')
+                                        (i === 1 && !statusData.admin_doc_verified && !isApplicant) ||
+                                        (i === 1 && isApplicant && status === 'pending') ||
+                                        (i === 2 && (statusData.admin_doc_verified || isApplicant) && !statusData.admin_bg_checked) ||
+                                        (i === 3 && (statusData.admin_bg_checked || isApplicant) && status === 'reviewing')
                                     );
 
-                                    const isLast = i === stages.length - 1;
+                                    const isLast = i === currentStages.length - 1;
 
                                     let stepBg = 'rgba(255,255,255,0.05)';
                                     let stepBorder = 'rgba(255,255,255,0.08)';
@@ -354,7 +396,7 @@ export default function TrackApplication() {
                                     // Background check step special coloring (amber while reviewing)
                                     if (isActive && i === 2) {
                                         stepBg = '#f59e0b20'; stepBorder = '#f59e0b'; stepColor = '#f59e0b';
-                                        iconContent = <Shield size={16} />;
+                                        iconContent = isApplicant ? <Clock size={16} /> : <Shield size={16} />;
                                     }
 
                                     // Final step special coloring
@@ -381,7 +423,7 @@ export default function TrackApplication() {
                                                 {!isLast && (
                                                     <div style={{
                                                         width: 2, flex: 1, minHeight: 32,
-                                                        background: stages[i + 1].statuses.includes(statusData.status)
+                                                        background: currentStages[i + 1].statuses.includes(statusData.status)
                                                             ? 'linear-gradient(180deg, #10b981, #6366f1)'
                                                             : 'rgba(255,255,255,0.06)',
                                                         borderRadius: 2, margin: '4px 0', transition: 'all 0.3s'

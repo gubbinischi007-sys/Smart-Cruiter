@@ -4,6 +4,7 @@ import { run, get, all } from '../database.js';
 import { Job, CreateJobInput, UpdateJobInput } from '../models/job.js';
 import { sendBulkEmails } from '../services/email.js';
 import { Applicant } from '../models/applicant.js';
+import { logHrAction } from '../services/activityLogger.js';
 
 const router = express.Router();
 
@@ -87,6 +88,10 @@ router.post('/', async (req, res) => {
     );
 
     const job = await get<Job>('SELECT * FROM jobs WHERE id = ?', [id]);
+    
+    // Log action
+    await logHrAction(req, `Created new job: ${input.title}`);
+
     res.status(201).json(job);
   } catch (error) {
     console.error('Error creating job:', error);
@@ -190,6 +195,9 @@ router.delete('/:id', async (req, res) => {
     await run('DELETE FROM jobs WHERE id = ?', [req.params.id]);
     // Also cleanup applicants if not handled by DB constraint
     await run('DELETE FROM applicants WHERE job_id = ?', [req.params.id]);
+
+    // Log action
+    await logHrAction(req, `Deleted job: ${job.title}`);
 
     res.status(204).send();
   } catch (error) {

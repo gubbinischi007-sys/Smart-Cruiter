@@ -16,6 +16,9 @@ interface Applicant {
   job_title: string;
   applied_at: string;
   resume_url?: string;
+  cover_letter?: string;
+  resume_text?: string;
+  score?: number; // Added score for performance
 }
 
 interface Notification {
@@ -62,6 +65,9 @@ export default function Applicants() {
 
   useEffect(() => {
     loadApplicants();
+    // Optimization: Poll every 2 minutes instead of 10s to allow better browser performance
+    const interval = setInterval(loadApplicants, 120000);
+    return () => clearInterval(interval);
   }, [filters]);
 
   const loadJobs = async () => {
@@ -518,83 +524,16 @@ export default function Applicants() {
                   <td className="text-sm text-muted">{new Date(applicant.applied_at).toLocaleDateString()}</td>
                   <td>
                     {(() => {
-                      const resumeUrlLower = (applicant.resume_url || '').toLowerCase();
+                      const score = applicant.score || 0;
+                      const resumeUrl = applicant.resume_url;
 
-                      // 1. Basic Presence Check
-                      if (!applicant.resume_url) {
+                      if (!resumeUrl) {
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#94a3b8' }}>
                             <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold' }}>0</div>
                             <span style={{ fontSize: '0.75rem' }}>No Resume</span>
                           </div>
                         );
-                      }
-
-                      // 2. Local Ownership Hint (Does THIS user's name match?)
-                      const nameParts = [
-                        applicant.first_name.toLowerCase(),
-                        applicant.last_name.toLowerCase(),
-                        applicant.email.split('@')[0].toLowerCase()
-                      ];
-                      const isLocalOwner = nameParts.some(part => part.length >= 3 && resumeUrlLower.includes(part));
-
-                      // 3. Conflict Analysis
-                      const othersUsingSameResume = applicants.filter(a =>
-                        a.id !== applicant.id &&
-                        a.resume_url === applicant.resume_url
-                      );
-
-                      const existsBetterOwner = othersUsingSameResume.some(other => {
-                        const otherParts = [
-                          other.first_name.toLowerCase(),
-                          other.last_name.toLowerCase(),
-                          other.email.split('@')[0].toLowerCase()
-                        ];
-                        return otherParts.some(p => p.length >= 3 && resumeUrlLower.includes(p));
-                      });
-
-                      // Pre-calculate Dynamic Score so it can be passed to the modal for ALL states
-                      let score = 0;
-
-                      const job = jobs.find(j => String(j.id) === String(applicant.job_id));
-                      const jdText = job ? `${job.title || ''} ${job.requirements || job.description || ''}`.toLowerCase().replace(/[^a-z\s]/g, ' ') : '';
-                      const stopWords = new Set([
-                        'the', 'and', 'to', 'of', 'in', 'for', 'with', 'on', 'is', 'as', 'at', 'by', 'an', 'be', 'this', 'that', 'are', 'from', 'or', 'have', 'has', 'will', 'you', 'your', 'we', 'our', 'it', 'can', 'all', 'more', 'their', 'which', 'about', 'what', 'how', 'when', 'where', 'who', 'not', 'but', 'so', 'if', 'then', 'than', 'such', 'into', 'out', 'up', 'down', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'some', 'any', 'both', 'each', 'few', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'too', 'very',
-                        'job', 'role', 'team', 'work', 'company', 'experience', 'skills', 'looking', 'years', 'working', 'using', 'ability', 'knowledge', 'strong', 'good', 'excellent',
-                        'responsible', 'developing', 'maintaining', 'building', 'creating', 'testing', 'writing', 'managing', 'leading', 'supporting', 'understanding', 'ensure', 'ensuring', 'provide', 'providing', 'required', 'requirements', 'including',
-                        'design', 'designing', 'development', 'software', 'applications', 'systems', 'business', 'data', 'technical', 'technology', 'environment', 'project', 'projects', 'solutions', 'process', 'processes', 'management', 'client', 'clients', 'user', 'users', 'product', 'products', 'service', 'services', 'support', 'performance', 'quality', 'best', 'practices', 'drive', 'driving', 'within', 'across', 'highly', 'related', 'field', 'degree', 'computer', 'science', 'engineering', 'bachelor', 'master', 'equivalent',
-                        'must', 'plus', 'preferred', 'solid', 'proven', 'track', 'record', 'familiarity', 'proficient', 'proficiency', 'hands-on', 'position', 'opportunity', 'culture', 'benefits', 'salary', 'compensation', 'remote', 'flexible', 'office', 'join', 'hire', 'hiring', 'candidate', 'successful', 'ideal', 'passionate', 'driven', 'motivated', 'self-starter', 'fast-paced', 'dynamic', 'innovative', 'cutting-edge', 'industry', 'collaborating', 'cross', 'functional', 'teams'
-                      ]);
-                      const words = jdText.split(/\s+/);
-                      const keywordCounts: Record<string, number> = {};
-                      words.forEach(w => {
-                        if (w.length > 3 && !stopWords.has(w)) {
-                          keywordCounts[w] = (keywordCounts[w] || 0) + 1;
-                        }
-                      });
-                      const jdKeywords = Object.entries(keywordCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
-                      // Use real stored resume text if available, otherwise simulated fallback
-                      const storedResumeText = ((applicant as any).resume_text || '').toLowerCase();
-                      const simulatedText = applicant.resume_url ? 'university bachelor degree experience intern pu school career team worked' : '';
-                      const bodyText = storedResumeText.length > 20 ? storedResumeText : simulatedText;
-                      const applicantText = `${applicant.job_title || ''} ${applicant.first_name || ''} ${applicant.resume_url || ''} ${(applicant as any).cover_letter || ''} ${bodyText}`.toLowerCase();
-                      const missingSkills = jdKeywords.filter(kw => !applicantText.includes(kw));
-
-                      const hasEducation = ['school', 'pu', 'pre university', 'ug', 'pg', 'bachelor', 'master', 'degree', 'diploma', 'university'].some(term => applicantText.includes(term));
-                      const hasExperience = ['experience', 'intern', 'years', 'worked', 'career'].some(term => applicantText.includes(term));
-
-                      if (isLocalOwner) {
-                        if (jdKeywords.length > 0) {
-                          const matchRatio = (jdKeywords.length - missingSkills.length) / jdKeywords.length;
-                          score = Math.round(100 * matchRatio);
-                          if (hasEducation) score += 15;
-                          if (hasExperience) score += 15;
-                          score = Math.min(score, 100);
-                        } else {
-                          score = 100;
-                        }
-                      } else {
-                        score = 0; // Disqualified due to mismatch
                       }
 
                       const openModal = () => {
@@ -604,113 +543,31 @@ export default function Applicants() {
                           if (name.match(/^([a-z])\1/)) name = name.substring(1);
                           return name.charAt(0).toUpperCase() + name.slice(1);
                         };
-                        setMatchScoreModal({ isOpen: true, score, applicantName: `${cleanName(applicant.first_name)} ${cleanName(applicant.last_name)}`, candidateId: applicant.id, jobId: applicant.job_id });
+                        setMatchScoreModal({ 
+                          isOpen: true, 
+                          score, 
+                          applicantName: `${cleanName(applicant.first_name)} ${cleanName(applicant.last_name)}`, 
+                          candidateId: applicant.id, 
+                          jobId: applicant.job_id 
+                        });
                       };
 
-                      // 4. Reporting Hierarchy
-
-                      // CASE A: Someone else is the owner, this user is likely incorrect (Mismatch)
-                      if (existsBetterOwner && !isLocalOwner) {
-                        return (
-                          <div onClick={openModal} className="cursor-pointer group hover:opacity-80 transition-opacity" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
-                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.1)' }}>!</div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Conflict</span>
-                              <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>Identity Mismatch</span>
-                            </div>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); sendIdentityWarning(applicant.id, applicant.first_name); }}
-                              title="Send Identity Warning"
-                              style={{
-                                marginLeft: 'auto',
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                border: '1px solid #ef4444',
-                                color: '#ef4444',
-                                padding: '4px',
-                                borderRadius: '4px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <Mail size={12} />
-                            </button>
-                          </div>
-                        );
-                      }
-
-                      // CASE C: General Conflict (Duplicate file, no clear owner via name matching)
-                      if (othersUsingSameResume.length > 0 && !isLocalOwner && !existsBetterOwner) {
-                        return (
-                          <div onClick={openModal} className="cursor-pointer group hover:opacity-80 transition-opacity" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
-                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold' }}>!</div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Duplicate</span>
-                              <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>File Conflict Det.</span>
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      // CASE D: Ownership status check - Name mismatch (Red Error)
-                      if (!isLocalOwner) {
-                        return (
-                          <div onClick={openModal} className="cursor-pointer group hover:opacity-80 transition-opacity" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
-                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.1)' }}>!</div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Conflict</span>
-                              <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>Identity Mismatch</span>
-                            </div>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); sendIdentityWarning(applicant.id, applicant.first_name); }}
-                              title="Send Identity Warning"
-                              style={{
-                                marginLeft: 'auto',
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                border: '1px solid #ef4444',
-                                color: '#ef4444',
-                                padding: '4px',
-                                borderRadius: '4px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <Mail size={12} />
-                            </button>
-                          </div>
-                        );
-                      }
-
-                      // CASE E: Job Role Mismatch (Yellow Warning if identity is verified but literally absolute 0 match)
-                      if (jdKeywords.length > 0 && missingSkills.length === jdKeywords.length && isLocalOwner) {
-                        return (
-                          <div
-                            className="cursor-pointer group hover:opacity-80 transition-opacity"
-                            onClick={openModal}
-                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b' }}
-                          >
-                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(245, 158, 11, 0.1)' }}>?</div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Review Needed</span>
-                              <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>Job Mismatch Det.</span>
-                            </div>
-                          </div>
-                        );
-                      }
-
                       let color = '#ef4444';
-                      let statusText = 'Poor Match';
+                      let statusText = 'Rejected';
                       let StatusIcon = XCircle;
 
-                      if (score >= 80) {
-                        color = '#10b981'; // Green
+                      if (score >= 90) {
+                        color = '#10b981';
                         statusText = 'Verified';
                         StatusIcon = CheckCircle;
-                      } else if (score >= 50) {
-                        color = '#f59e0b'; // Yellow
-                        statusText = 'Review Needed';
-                        StatusIcon = AlertTriangle;
-                      } else {
-                        color = '#ef4444'; // Red
-                        statusText = 'Poor Match';
-                        StatusIcon = XCircle;
+                      } else if (score >= 81) {
+                        color = '#818cf8';
+                        statusText = 'Recommended';
+                        StatusIcon = GitMerge;
+                      } else if (score >= 51) {
+                        color = '#f59e0b';
+                        statusText = 'Applied';
+                        StatusIcon = Info;
                       }
 
                       return (

@@ -25,6 +25,14 @@ export const setUserRole = (role: string | null) => {
   }
 };
 
+export const setUserEmail = (email: string | null) => {
+  if (email) {
+    api.defaults.headers.common['x-user-email'] = email;
+  } else {
+    delete api.defaults.headers.common['x-user-email'];
+  }
+};
+
 
 // Jobs API
 export const jobsApi = {
@@ -139,6 +147,10 @@ export const historyApi = {
   }) => api.post('/history', data),
   delete: (id: string) => api.delete(`/history/${id}`),
   clearAll: () => api.delete('/history'),
+  getActivityLogs: () => api.get('/history/activity'),
+  getSessions: () => api.get('/history/sessions'),
+  startSession: (email: string) => api.post('/history/sessions/start', { email }),
+  stopSession: (sessionId: string) => api.post('/history/sessions/stop', { sessionId }),
 };
 
 // HR Team API (Master Admin only)

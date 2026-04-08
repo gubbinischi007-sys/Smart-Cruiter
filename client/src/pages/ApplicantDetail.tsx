@@ -106,20 +106,37 @@ export default function ApplicantDetail() {
 
   const loadData = async () => {
     if (!id) return;
+    setLoading(true);
+    
+    // 1. Fetch Applicant (Required)
     try {
-      const [applicantRes, interviewsRes, referencesRes] = await Promise.all([
-        applicantsApi.getById(id),
-        interviewsApi.getAll({ applicant_id: id }),
-        referencesApi.getByApplicant(id)
-      ]);
+      const applicantRes = await applicantsApi.getById(id);
       setApplicant(applicantRes.data);
-      setInterviews(interviewsRes.data);
-      setReferences(referencesRes.data);
     } catch (error) {
-      console.error('Failed to load applicant details:', error);
-    } finally {
-      setLoading(false);
+      console.warn('Failed to load applicant core details:', error);
+      // If the applicant fetch itself fails (404), they truly aren't found
+      setApplicant(null);
     }
+
+    // 2. Fetch Interviews (Graceful fallback)
+    try {
+      const interviewsRes = await interviewsApi.getAll({ applicant_id: id });
+      setInterviews(interviewsRes.data || []);
+    } catch (error) {
+      console.warn('Interviews table not yet initialized or inaccessible:', error);
+      setInterviews([]);
+    }
+
+    // 3. Fetch References (Graceful fallback)
+    try {
+      const referencesRes = await referencesApi.getByApplicant(id);
+      setReferences(referencesRes.data || []);
+    } catch (error) {
+      console.warn('References table not yet initialized or inaccessible:', error);
+      setReferences([]);
+    }
+
+    setLoading(false);
   };
 
   const handleOfferSubmit = async (e: React.FormEvent) => {
@@ -390,142 +407,66 @@ export default function ApplicantDetail() {
             </select>
           </div>
 
-          {applicant.resume_url && (
-            <div className="info-row" style={{ marginTop: '1rem' }}>
-              <span className="info-label">Resume:</span>
-              <button
-                onClick={async () => {
-                  if (applicant.resume_url?.includes('storage.smart-cruiter.com')) {
-                    // GENERATE DYNAMIC RESUME
+          {applicant.resume_url && (() => {
+            const isLocal = applicant.resume_url?.startsWith('/uploads/');
+            const isPlaceholder = applicant.resume_url?.includes('storage.smart-cruiter.com');
+
+            return (
+              <div className="info-row" style={{ marginTop: '1rem' }}>
+                <span className="info-label">Resume:</span>
+                <button
+                  onClick={async () => {
+                    if (isLocal) {
+                      const baseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
+                      const rootUrl = baseUrl.replace(/\/api$/, '');
+                      window.open(`${rootUrl}${applicant.resume_url}`, '_blank');
+                    } else if (isPlaceholder) {
                     try {
                       // @ts-ignore
                       const { jsPDF } = await import('jspdf');
                       const doc = new jsPDF();
-
-                      // Header / Name
-                      doc.setFontSize(24);
-                      doc.setTextColor(33, 33, 33);
-                      doc.setFont('helvetica', 'bold');
-                      const cleanName = (n: string) => {
-                        if (!n) return '';
-                        let name = n.trim().toLowerCase();
-                        if (name.match(/^([a-z])\1/)) name = name.substring(1);
-                        return name.charAt(0).toUpperCase() + name.slice(1);
-                      };
-                      doc.text(`${cleanName(applicant.first_name)} ${cleanName(applicant.last_name)}`, 20, 20);
-
-                      // Contact Info
+                      doc.setFontSize(20);
+                      doc.text(`${applicant.first_name} ${applicant.last_name} - Resume`, 20, 20);
                       doc.setFontSize(10);
-                      doc.setFont('helvetica', 'normal');
-                      doc.setTextColor(100, 100, 100);
-                      doc.text(`${applicant.email} | ${applicant.phone || '555-0123'} | ${applicant.job_title || 'Candidate'}`, 20, 27);
-
-                      // Horizontal Line
-                      doc.setDrawColor(200, 200, 200);
-                      doc.line(20, 32, 190, 32);
-
-                      // Summary Section
-                      doc.setFontSize(12);
-                      doc.setFont('helvetica', 'bold');
-                      doc.setTextColor(63, 81, 181); // Primary color tone
-                      doc.text('PROFESSIONAL SUMMARY', 20, 45);
-
-                      doc.setFontSize(10);
-                      doc.setTextColor(50, 50, 50);
-                      doc.setFont('helvetica', 'normal');
-                      const summaryText = `Motivated and experienced ${applicant.job_title || 'professional'} with a strong background in delivering high-quality results. Proven track record of success in fast-paced environments. Dedicated to continuous learning and contributing to team success.`;
-                      const splitSummary = doc.splitTextToSize(summaryText, 170);
-                      doc.text(splitSummary, 20, 52);
-
-                      // Experience Section
-                      doc.setFontSize(12);
-                      doc.setFont('helvetica', 'bold');
-                      doc.setTextColor(63, 81, 181);
-                      doc.text('EXPERIENCE', 20, 70);
-
-                      // Job 1
-                      doc.setFontSize(11);
-                      doc.setTextColor(33, 33, 33);
-                      doc.text(`Senior ${applicant.job_title || 'Analyst'}`, 20, 78);
-                      doc.setFontSize(10);
-                      doc.setTextColor(100, 100, 100);
-                      doc.setFont('helvetica', 'italic');
-                      doc.text('Tech Solutions Inc. | Jan 2020 - Present', 190, 78, { align: 'right' });
-
-                      doc.setFont('helvetica', 'normal');
-                      doc.setTextColor(50, 50, 50);
-                      const exp1 = [
-                        "• Led cross-functional teams to deliver key project milestones 20% ahead of schedule.",
-                        "• Implemented new processes that increased departmental efficiency by 15%.",
-                        "• Mentored junior team members and conducted code reviews."
-                      ];
-                      let yPos = 85;
-                      exp1.forEach(line => {
-                        doc.text(line, 25, yPos);
-                        yPos += 6;
-                      });
-
-                      // Job 2
-                      doc.setFontSize(11);
-                      doc.setTextColor(33, 33, 33);
-                      doc.setFont('helvetica', 'bold');
-                      doc.text(`Junior ${applicant.job_title || 'Developer'}`, 20, 110);
-                      doc.setFontSize(10);
-                      doc.setTextColor(100, 100, 100);
-                      doc.setFont('helvetica', 'italic');
-                      doc.text('StartUp Innovations | Jun 2018 - Dec 2019', 190, 110, { align: 'right' });
-
-                      doc.setFont('helvetica', 'normal');
-                      doc.setTextColor(50, 50, 50);
-                      const exp2 = [
-                        "• Collaborated with product managers to define requirements.",
-                        "• Developed and maintained scalable backend services.",
-                        "• Resolved critical bugs improving system stability."
-                      ];
-                      yPos = 117;
-                      exp2.forEach(line => {
-                        doc.text(line, 25, yPos);
-                        yPos += 6;
-                      });
-
-                      // Education Section
-                      doc.setFontSize(12);
-                      doc.setFont('helvetica', 'bold');
-                      doc.setTextColor(63, 81, 181);
-                      doc.text('EDUCATION', 20, 145);
-
-                      doc.setFontSize(11);
-                      doc.setTextColor(33, 33, 33);
-                      doc.text('Bachelor of Science in Computer Science', 20, 153);
-                      doc.setFontSize(10);
-                      doc.setTextColor(100, 100, 100);
-                      doc.setFont('helvetica', 'italic');
-                      doc.text('State University | 2014 - 2018', 190, 153, { align: 'right' });
-
-                      // Footer
-                      doc.setFontSize(8);
-                      doc.setTextColor(150, 150, 150);
-                      doc.text('Generated by Smart-Cruiter Applicant Tracking System', 105, 280, { align: 'center' });
-
-                      // Open PDF
-                      const pdfBlob = doc.output('bloburl');
-                      window.open(pdfBlob, '_blank');
-
-                    } catch (error) {
-                      console.error("Failed to generate resume:", error);
-                      addNotification('error', "Could not generate resume preview.");
+                      doc.text(`Email: ${applicant.email}`, 20, 30);
+                      
+                      if ((applicant as any).resume_text) {
+                        const splitText = doc.splitTextToSize((applicant as any).resume_text, 170);
+                        doc.text(splitText, 20, 40);
+                      } else {
+                        doc.text('Original file reference not found. This is a text-based fallback.', 20, 40);
+                      }
+                      
+                      window.open(doc.output('bloburl'), '_blank');
+                    } catch (err) {
+                      console.error('Failed to generate preview:', err);
                     }
                   } else if (applicant.resume_url) {
                     window.open(applicant.resume_url, '_blank');
                   }
                 }}
-                className="btn btn-sm btn-outline"
-                style={{ cursor: 'pointer' }}
+                className="btn btn-secondary"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
               >
-                View Resume
+                <FileText size={14} /> View Original File
               </button>
+
+              {!isPlaceholder && (
+                <div style={{ marginTop: '0.8rem' }}>
+                  <a 
+                    href={applicant.resume_url.startsWith('/uploads/') ? `${((import.meta as any).env.VITE_API_URL || 'http://localhost:3001').replace(/\/api$/, '')}${applicant.resume_url}` : applicant.resume_url}
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-muted"
+                    style={{ fontSize: '0.8rem', textDecoration: 'underline', color: '#6366f1', fontWeight: 500 }}
+                  >
+                    🔗 Direct PDF Link: {applicant.resume_url.split('/').pop()}
+                  </a>
+                </div>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {applicant.offer_status && (
             <div className={`info-row offer-status-box ${applicant.offer_status}`} style={{ marginTop: '1rem', padding: '1rem', borderRadius: '0.5rem', background: applicant.offer_status === 'accepted' ? 'rgba(16, 185, 129, 0.1)' : applicant.offer_status === 'rejected' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)', border: `1px solid ${applicant.offer_status === 'accepted' ? '#10b981' : applicant.offer_status === 'rejected' ? '#ef4444' : '#f59e0b'}` }}>
@@ -658,7 +599,7 @@ export default function ApplicantDetail() {
                     const newDate = e.target.value;
                     if (interviewForm.type === 'online' && newDate) {
                       const calUser = import.meta.env.VITE_CALCOM_USERNAME || 'nischitha-l-35mch5';
-                      const calEvent = import.meta.env.VITE_CALCOM_EVENT || '30minz';
+                      const calEvent = import.meta.env.VITE_CALCOM_EVENT || '30min';
                       const params = new URLSearchParams();
                       if (applicant?.first_name || applicant?.last_name) params.set('name', `${applicant.first_name} ${applicant.last_name}`.trim());
                       if (applicant?.email) params.set('email', applicant.email);
@@ -698,7 +639,7 @@ export default function ApplicantDetail() {
                     if (newType === 'online') {
                       // Build Cal.com booking link pre-filled with candidate info + date
                       const calUser = import.meta.env.VITE_CALCOM_USERNAME || 'nischitha-l-35mch5';
-                      const calEvent = import.meta.env.VITE_CALCOM_EVENT || '30minz';
+                      const calEvent = import.meta.env.VITE_CALCOM_EVENT || '30min';
                       const params = new URLSearchParams();
                       if (applicant?.first_name || applicant?.last_name) params.set('name', `${applicant.first_name} ${applicant.last_name}`.trim());
                       if (applicant?.email) params.set('email', applicant.email);

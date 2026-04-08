@@ -27,6 +27,9 @@ export default function Jobs() {
 
   useEffect(() => {
     loadJobs();
+    
+    // Optimization: Poll every 2 minutes instead of 15 seconds to save resources
+    const interval = setInterval(loadJobs, 120000);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -36,7 +39,10 @@ export default function Jobs() {
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearInterval(interval);
+    };
   }, [filter]);
 
   const loadJobs = async () => {

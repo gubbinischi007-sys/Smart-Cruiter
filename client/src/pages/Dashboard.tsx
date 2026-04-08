@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { analyticsApi, applicantsApi, interviewsApi, historyApi, employeesApi, platformApi } from '../services/api';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { Briefcase, Users, UserCheck, Calendar, TrendingUp, Plus, ArrowRight, Brain, CheckCircle, Copy, History, AlertTriangle, ShieldCheck, Download, FileText, FileSpreadsheet, UserMinus, GitMerge, X } from 'lucide-react';
@@ -16,6 +17,8 @@ interface DashboardStats {
   scheduledInterviews: number;
   applicantsByStage: Array<{ stage: string; count: number }>;
   applicantsByJob: Array<{ job_id: string; job_title: string; count: number }>;
+  recentApplications: any[];
+  upcomingInterviews: any[];
 }
 
 export default function Dashboard() {
@@ -38,38 +41,35 @@ export default function Dashboard() {
     title: '',
     message: '',
   });
-
+  
   useEffect(() => {
     loadDashboard();
-  }, []);
+
+    // REAL-TIME SUBSCRIPTIONS
+    // Listen for any changes that should trigger a dashboard refresh
+    const dashboardChannel = supabase
+      .channel('dashboard-realtime-v4')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'applicants' }, loadDashboard)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, loadDashboard)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'interviews' }, loadDashboard)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_activity_logs' }, loadDashboard)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_sessions' }, loadDashboard)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(dashboardChannel);
+    };
+  }, [user.email]);
 
   const loadDashboard = async () => {
     try {
-      const results = await Promise.allSettled([
-        analyticsApi.getDashboard(),
-        applicantsApi.getAll(),
-        interviewsApi.getAll()
-      ]);
-
-      if (results[0].status === 'fulfilled') {
-        setStats((results[0] as any).value.data);
-      } else {
-        console.error('Analytics failed:', (results[0] as any).reason);
-        // Set basic empty stats to allow rendering
-        setStats({ totalJobs: 0, openJobs: 0, totalApplicants: 0, recentApplicants: 0, scheduledInterviews: 0, applicantsByStage: [], applicantsByJob: [] });
-      }
-
-      if (results[1].status === 'fulfilled') {
-        setRecentApplications((results[1] as any).value.data.slice(0, 5));
-      }
-
-      if (results[2].status === 'fulfilled') {
-        const now = new Date();
-        const upcoming = (results[2] as any).value.data
-          .filter((i: any) => new Date(i.scheduled_at) > now)
-          .slice(0, 5);
-        setUpcomingInterviews(upcoming);
-      }
+      // Unified API call - much faster!
+      const response = await analyticsApi.getDashboard();
+      const data = response.data;
+      
+      setStats(data);
+      setRecentApplications(data.recentApplications || []);
+      setUpcomingInterviews(data.upcomingInterviews || []);
 
       // Fetch company verification status if HR
       if (user.role === 'hr' && user.email) {
@@ -80,7 +80,6 @@ export default function Dashboard() {
           console.warn('Could not fetch company status:', err);
         }
       }
-
     } catch (error) {
       console.error('Failed to load dashboard:', error);
     } finally {

@@ -1,6 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { all, get, run } from '../database.js';
+import { logHrAction } from '../services/activityLogger.js';
 
 const router = express.Router();
 
@@ -47,6 +48,10 @@ router.post('/', async (req, res) => {
         );
 
         const newEmployee = await get('SELECT * FROM employees WHERE id = ?', [id]);
+        
+        // Log action
+        await logHrAction(req, `Onboarded new employee: ${name} (${job_title})`);
+
         res.status(201).json(newEmployee);
     } catch (error) {
         console.error('Error creating employee:', error);
@@ -78,6 +83,10 @@ router.patch('/:id', async (req, res) => {
         );
 
         const updatedEmployee = await get('SELECT * FROM employees WHERE id = ?', [id]);
+        
+        // Log action
+        await logHrAction(req, `Updated employee profile for: ${updatedEmployee.name}`);
+
         res.json(updatedEmployee);
     } catch (error) {
         console.error('Error updating employee:', error);
@@ -95,6 +104,10 @@ router.delete('/:id', async (req, res) => {
         }
 
         await run('DELETE FROM employees WHERE id = ?', [id]);
+        
+        // Log action
+        await logHrAction(req, `Removed employee: ${employee.name}`);
+
         res.json({ message: 'Employee removed successfully' });
     } catch (error) {
         console.error('Error deleting employee:', error);

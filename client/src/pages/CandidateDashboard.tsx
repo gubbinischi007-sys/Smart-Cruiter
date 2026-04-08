@@ -17,6 +17,8 @@ interface Application {
     offerStatus?: string;
 }
 
+import { supabase } from '../lib/supabase';
+
 export default function CandidateDashboard() {
     const { user } = useAuth();
     // State for real data
@@ -43,9 +45,31 @@ export default function CandidateDashboard() {
     };
 
     useEffect(() => {
+        if (!user.email) return;
+        
         loadData();
-        const interval = setInterval(loadData, 5000); // Poll every 5 seconds
-        return () => clearInterval(interval);
+
+        // REAL-TIME SUBSCRIPTIONS
+        const applicantChannel = supabase
+            .channel('candidate-apps')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'applicants', filter: `email=eq.${user.email}` }, () => {
+                loadData();
+            })
+            .subscribe();
+
+        const interviewChannel = supabase
+            .channel('candidate-interviews')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'interviews' }, (payload: any) => {
+                // Since we can't easily filter by applicant_email in the channel filter for the interviews table (it's often a join or ID)
+                // we'll just refresh whenever ANY interview change happens, which is safe for small numbers of interviews.
+                loadData();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(applicantChannel);
+            supabase.removeChannel(interviewChannel);
+        };
     }, [user.email]);
 
     const loadData = async () => {
@@ -166,7 +190,7 @@ export default function CandidateDashboard() {
                         </p>
                     </div>
                     <a
-                        href={`https://cal.com/nischitha-l-35mch5/30minz?name=${encodeURIComponent(user.name || '')}&email=${encodeURIComponent(user.email || '')}`}
+                        href={`https://cal.com/nischitha-l-35mch5/30min?name=${encodeURIComponent(user.name || '')}&email=${encodeURIComponent(user.email || '')}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
@@ -219,17 +243,6 @@ export default function CandidateDashboard() {
                                         </span>
                                     </div>
                                     <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
-                                        {['shortlisted', 'recommended'].includes(app.stage.toLowerCase()) && (
-                                            <a
-                                                href={`https://cal.com/nischitha-l-35mch5/30minz?name=${encodeURIComponent(user.name || '')}&email=${encodeURIComponent(user.email || '')}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="btn btn-sm btn-primary"
-                                                style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'linear-gradient(135deg, #6366f1, #a855f7)', border: 'none' }}
-                                            >
-                                                <Calendar size={13} /> Schedule
-                                            </a>
-                                        )}
                                         <Link to={`/candidate/applications/${app.id}/status`} className="btn btn-sm btn-secondary">View Status</Link>
                                         <button
                                             onClick={() => handleWithdrawClick(app.id)}

@@ -34,7 +34,10 @@ router.get('/dashboard', async (req, res) => {
         cIdArr
       ),
       get<{ count: string }>(`SELECT COUNT(*) as count FROM applicants ${applicantTimeFilter}`, cIdArr),
-      get<{ count: string }>(`SELECT COUNT(*) as count FROM interviews WHERE status = 'scheduled' AND scheduled_at >= datetime('now') ${interviewFilter}`, cIdArr)
+      get<{ count: string }>(`SELECT COUNT(*) as count FROM interviews WHERE status = 'scheduled' AND scheduled_at >= date('now') ${interviewFilter}`, cIdArr),
+      // NEW: Compact lists for dashboard
+      all<any>(`SELECT a.*, j.title as job_title FROM applicants a LEFT JOIN jobs j ON a.job_id = j.id ${applicantFilter} ORDER BY a.applied_at DESC LIMIT 5`, cIdArr),
+      all<any>(`SELECT i.*, a.first_name || ' ' || a.last_name as applicant_name, j.title as job_title FROM interviews i LEFT JOIN applicants a ON i.applicant_id = a.id LEFT JOIN jobs j ON i.job_id = j.id WHERE i.status = 'scheduled' AND i.scheduled_at >= date('now') ${interviewFilter} ORDER BY i.scheduled_at ASC LIMIT 5`, cIdArr)
     ]);
 
     // Helper to get result or default
@@ -45,17 +48,21 @@ router.get('/dashboard', async (req, res) => {
     const totalApplicants = val(2, { count: '0' });
     const applicantsByStage = val(3, []);
     const applicantsByJob = val(4, []);
-    const recentApplicants = val(5, { count: '0' });
-    const scheduledInterviews = val(6, { count: '0' });
+    const recentApplicantsTotal = val(5, { count: '0' });
+    const scheduledInterviewsTotal = val(6, { count: '0' });
+    const recentApplications = val(7, []);
+    const upcomingInterviews = val(8, []);
 
     res.json({
       totalJobs: parseInt(totalJobs?.count || '0'),
       openJobs: parseInt(openJobs?.count || '0'),
       totalApplicants: parseInt(totalApplicants?.count || '0'),
-      recentApplicants: parseInt(recentApplicants?.count || '0'),
-      scheduledInterviews: parseInt(scheduledInterviews?.count || '0'),
+      recentApplicants: parseInt(recentApplicantsTotal?.count || '0'),
+      scheduledInterviews: parseInt(scheduledInterviewsTotal?.count || '0'),
       applicantsByStage,
       applicantsByJob,
+      recentApplications,
+      upcomingInterviews
     });
   } catch (error) {
     console.error('Error fetching dashboard analytics:', error);

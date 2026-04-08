@@ -91,4 +91,77 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+router.get('/activity', async (req, res) => {
+    try {
+        const companyId = req.headers['x-company-id'];
+        let query = 'SELECT * FROM hr_activity_logs WHERE 1=1';
+        const params: any[] = [];
+
+        if (companyId) {
+            query += ' AND company_id = ?';
+            params.push(companyId);
+        }
+
+        query += ' ORDER BY created_at DESC LIMIT 500';
+
+        const logs = await all(query, params);
+        res.json(logs);
+    } catch (error) {
+        console.error('Failed to fetch activity logs:', error);
+        res.status(500).json({ error: 'Failed to fetch activity logs' });
+    }
+});
+
+router.get('/sessions', async (req, res) => {
+    try {
+        const companyId = req.headers['x-company-id'];
+        let query = 'SELECT * FROM user_sessions WHERE 1=1';
+        const params: any[] = [];
+
+        if (companyId) {
+            query += ' AND company_id = ?';
+            params.push(companyId);
+        }
+
+        query += ' ORDER BY login_time DESC LIMIT 100';
+
+        const sessions = await all(query, params);
+        res.json(sessions);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch sessions' });
+    }
+});
+
+router.post('/sessions/start', async (req, res) => {
+    const { email } = req.body;
+    const companyId = req.headers['x-company-id'];
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    try {
+        const id = uuidv4();
+        await run(
+            'INSERT INTO user_sessions (id, user_email, company_id, login_time) VALUES (?, ?, ?, ?)',
+            [id, email, companyId || null, new Date().toISOString()]
+        );
+        res.json({ sessionId: id });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to start session' });
+    }
+});
+
+router.post('/sessions/stop', async (req, res) => {
+    const { sessionId } = req.body;
+    if (!sessionId) return res.status(400).json({ error: 'Session ID is required' });
+
+    try {
+        await run(
+            'UPDATE user_sessions SET logout_time = ? WHERE id = ?',
+            [new Date().toISOString(), sessionId]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to stop session' });
+    }
+});
+
 export default router;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { History as HistoryIcon, Clock, LogIn, LogOut, User, Trash2 } from 'lucide-react';
 import { historyApi } from '../services/api';
+import { supabase } from '../lib/supabase';
 import './History.css';
 
 interface Action {
@@ -32,83 +33,91 @@ interface ApplicationRecord {
 export default function History() {
     const [history, setHistory] = useState<LoginRecord[]>([]);
     const [appHistory, setAppHistory] = useState<ApplicationRecord[]>([]);
+    const [systemUsersCount, setSystemUsersCount] = useState(0);
+    const [activeUsersCount, setActiveUsersCount] = useState(0);
+
+    const loadData = async () => {
+        try {
+            // 1. Fetch Terminal Histories
+            const appRes = await historyApi.getAll();
+            setAppHistory(appRes.data || []);
+
+            // 2. Fetch Aggregates
+            const [profilesRes, sessionsRes] = await Promise.all([
+                supabase.from('user_profiles').select('*', { count: 'exact', head: true }),
+                historyApi.getSessions() // We'll filter this for active ones
+            ]);
+            
+            if (profilesRes.count !== null) setSystemUsersCount(profilesRes.count);
+
+            const allSessions = sessionsRes.data || [];
+            const activeUserEmails = new Set(
+                allSessions
+                    .filter((sess: any) => !sess.logout_time)
+                    .map((sess: any) => sess.user_email)
+            );
+            setActiveUsersCount(activeUserEmails.size);
+
+            // 3. Fetch Raw Data for Sessions & Actions
+            const [activityRes, profileRes] = await Promise.all([
+                historyApi.getActivityLogs(),
+                supabase.from('user_profiles').select('email, role, role_title')
+            ]);
+
+            const sessions = allSessions;
+            const logs = activityRes.data || [];
+            const profiles = profileRes.data || [];
+            const profileMap = new Map(profiles.map((p: any) => [p.email, p]));
+
+            // 4. Enrich Sessions with Actions
+            // Sort logs by time ascending so we can push them into correctly timed sessions
+            const sortedLogs = [...logs].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+            const enrichedSessions: LoginRecord[] = sessions.map((sess: any) => {
+                const profile = profileMap.get(sess.user_email);
+                
+                // Find actions that happened DURING this session
+                const sessionActions = sortedLogs.filter(log => {
+                    const logTime = new Date(log.created_at).getTime();
+                    const loginTime = new Date(sess.login_time).getTime();
+                    const logoutTime = sess.logout_time ? new Date(sess.logout_time).getTime() : Date.now();
+                    
+                    return log.user_email === sess.user_email && logTime >= loginTime && logTime <= logoutTime;
+                }).map(log => ({
+                    description: log.action,
+                    timestamp: log.created_at
+                }));
+
+                return {
+                    id: sess.id,
+                    email: sess.user_email,
+                    role: profile?.role_title || profile?.role || 'HR Member',
+                    loginTime: sess.login_time,
+                    logoutTime: sess.logout_time,
+                    actions: sessionActions
+                };
+            });
+
+            setHistory(enrichedSessions);
+        } catch (error) {
+            console.error('Failed to load history data:', error);
+        }
+    };
 
     useEffect(() => {
-        const loadHistory = async () => {
-            // 1. Load Login History (keeping in LS as it's private/local for now)
-            const savedHistory = localStorage.getItem('loginHistory');
-            if (savedHistory) {
-                try {
-                    const parsedHistory = JSON.parse(savedHistory);
-                    parsedHistory.sort((a: LoginRecord, b: LoginRecord) =>
-                        new Date(b.loginTime).getTime() - new Date(a.loginTime).getTime()
-                    );
-                    setHistory(parsedHistory);
-                } catch (e) {
-                    console.error('Failed to parse status history', e);
-                }
-            }
+        loadData();
 
-            try {
-                // 2. Fetch Application History from Database
-                const response = await historyApi.getAll();
-                const dbHistory = response.data || [];
-
-                // 3. Check for legacy LocalStorage items to migrate
-                const savedAppHistory = localStorage.getItem('applicationHistory');
-                if (savedAppHistory) {
-                    try {
-                        const localRecords: ApplicationRecord[] = JSON.parse(savedAppHistory);
-
-                        // Find records that aren't in the DB yet (using email + status + job as unique-ish check)
-                        const newToMigrate = localRecords.filter(local =>
-                            !dbHistory.some((db: any) =>
-                                db.email === local.email &&
-                                db.status === local.status &&
-                                db.job_title === local.job_title
-                            )
-                        );
-
-                        if (newToMigrate.length > 0) {
-                            console.log(`Migrating ${newToMigrate.length} local records to database...`);
-                            await Promise.all(newToMigrate.map(record =>
-                                historyApi.create({
-                                    name: record.name,
-                                    email: record.email,
-                                    job_title: record.job_title,
-                                    status: record.status,
-                                    reason: record.reason
-                                })
-                            ));
-
-                            // Re-fetch now that we've migrated
-                            const refreshedResponse = await historyApi.getAll();
-                            setAppHistory(refreshedResponse.data);
-                        } else {
-                            setAppHistory(dbHistory);
-                        }
-
-                        // Clear LS after successful migration/check to prevent background loops
-                        localStorage.removeItem('applicationHistory');
-                    } catch (e) {
-                        console.error('Migration failed', e);
-                        setAppHistory(dbHistory);
-                    }
-                } else {
-                    setAppHistory(dbHistory);
-                }
-            } catch (error) {
-                console.error('Failed to fetch app history from database', error);
-            }
-        };
-
-        loadHistory();
-        window.addEventListener('storage', loadHistory);
-        const interval = setInterval(loadHistory, 3000);
+        // REAL-TIME SUBSCRIPTIONS
+        const channel = supabase
+            .channel('history-realtime-v3')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'application_history' }, loadData)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, loadData)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'hr_activity_logs' }, loadData)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'user_sessions' }, loadData)
+            .subscribe();
 
         return () => {
-            window.removeEventListener('storage', loadHistory);
-            clearInterval(interval);
+            supabase.removeChannel(channel);
         };
     }, []);
 
@@ -150,12 +159,21 @@ export default function History() {
             {/* Stats Row */}
             <div className="history-stats">
                 <div className="stat-card">
+                    <div className="stat-icon bg-green">
+                        <User size={24} className="text-green" />
+                    </div>
+                    <div className="stat-info">
+                        <span className="stat-value">{activeUsersCount}</span>
+                        <span className="stat-label">Active HR Users</span>
+                    </div>
+                </div>
+                <div className="stat-card">
                     <div className="stat-icon bg-blue">
                         <User size={24} />
                     </div>
                     <div className="stat-info">
-                        <span className="stat-value">{new Set(history.map(h => h.email)).size}</span>
-                        <span className="stat-label">System Users</span>
+                        <span className="stat-value">{systemUsersCount}</span>
+                        <span className="stat-label">Total System Users</span>
                     </div>
                 </div>
                 <div className="stat-card">
@@ -300,17 +318,17 @@ export default function History() {
                                                     <span className="status-active">Active Now</span>
                                                 )}
                                             </div>
-                                            {record.logoutTime && (
-                                                <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.5rem', paddingLeft: '22px' }}>
-                                                    Duration: {(() => {
-                                                        const diff = new Date(record.logoutTime).getTime() - new Date(record.loginTime).getTime();
-                                                        const minutes = Math.floor(diff / 60000);
-                                                        if (minutes < 60) return `${minutes}m`;
-                                                        const hours = Math.floor(minutes / 60);
-                                                        return `${hours}h ${minutes % 60}m`;
-                                                    })()}
-                                                </div>
-                                            )}
+                                            <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.5rem', paddingLeft: '22px' }}>
+                                                Duration {record.logoutTime ? '' : '(so far)'}: {(() => {
+                                                    const end = record.logoutTime ? new Date(record.logoutTime).getTime() : Date.now();
+                                                    const diff = end - new Date(record.loginTime).getTime();
+                                                    const minutes = Math.floor(diff / 60000);
+                                                    if (minutes < 1) return '< 1m';
+                                                    if (minutes < 60) return `${minutes}m`;
+                                                    const hours = Math.floor(minutes / 60);
+                                                    return `${hours}h ${minutes % 60}m`;
+                                                })()}
+                                            </div>
                                         </td>
                                         <td>
                                             {record.actions && record.actions.length > 0 ? (
@@ -323,7 +341,7 @@ export default function History() {
                                                     ))}
                                                 </ul>
                                             ) : (
-                                                <span style={{ color: '#6b7280', fontSize: '0.875rem', fontStyle: 'italic' }}>No actions recorded</span>
+                                                <span style={{ color: '#6b7280', fontSize: '0.875rem', fontStyle: 'italic' }}>No actions performed</span>
                                             )}
                                         </td>
                                     </tr>

@@ -120,7 +120,8 @@ function parseDelete(sql: string, params: any[]): { table: string; filters: Reco
 // Parse SELECT statements
 // ─────────────────────────────────────────────────────────
 function parseSelect(sql: string, params: any[]): { table: string; filters: Record<string, any>; orderBy?: string; orderDir?: string; limit?: number } | null {
-  const m = sql.match(/FROM\s+"?(\w+)"?(?:\s+as\s+)?(?:\s+\w+)?/i);
+  // Capture table name even if it has an alias (e.g. FROM applicants a)
+  const m = sql.match(/FROM\s+"?(\w+)"?(?:\s+(?:as\s+)?\w+)?/i);
   if (!m) return null;
   const table = m[1];
 
@@ -144,10 +145,10 @@ function parseSelect(sql: string, params: any[]): { table: string; filters: Reco
   // ORDER BY
   let orderBy: string | undefined;
   let orderDir: string | undefined;
-  const orderMatch = sql.match(/ORDER\s+BY\s+(\w+)(?:\s+(ASC|DESC))?/i);
+  const orderMatch = sql.match(/ORDER\s+BY\s+(?:(\w+)\.)?(\w+)(?:\s+(ASC|DESC))?/i);
   if (orderMatch) {
-    orderBy = orderMatch[1];
-    orderDir = (orderMatch[2] || 'ASC').toUpperCase();
+    orderBy = orderMatch[2];
+    orderDir = (orderMatch[3] || 'ASC').toUpperCase();
   }
 
   // LIMIT
@@ -221,6 +222,8 @@ export async function all<T = any>(sql: string, params: any[] = []): Promise<T[]
   const parsed = parseSelect(sql, params);
   if (!parsed) throw new Error(`Could not parse SELECT: ${sql}`);
   const { table, filters, orderBy, orderDir, limit } = parsed;
+
+  console.log(`[DB Shim] Table: ${table}, Filters: ${JSON.stringify(filters)}`);
 
   const isCount = sql.toUpperCase().includes('COUNT(*)');
   

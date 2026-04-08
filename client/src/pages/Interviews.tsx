@@ -26,6 +26,9 @@ export default function Interviews() {
 
     useEffect(() => {
         loadInterviews();
+        // Enable real-time polling every 8 seconds for dynamic updates
+        const interval = setInterval(loadInterviews, 8000);
+        return () => clearInterval(interval);
     }, []);
 
     const loadInterviews = async () => {

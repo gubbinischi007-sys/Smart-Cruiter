@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase, authService, AppUser } from '../lib/supabase';
-import { setUserRole } from '../services/api';
+import { setUserRole, setUserEmail, historyApi } from '../services/api';
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -53,11 +53,21 @@ function syncLocalStorage(profile: AppUser) {
     isAuthenticated: true,
   }));
   setUserRole(profile.role);
+  setUserEmail(profile.email);
+
+  // Start server session if HR
+  if (profile.role === 'hr' && !localStorage.getItem('serverSessionId')) {
+    historyApi.startSession(profile.email).then(res => {
+      localStorage.setItem('serverSessionId', res.data.sessionId);
+    }).catch(console.error);
+  }
 }
 function clearLocalStorage() {
   localStorage.removeItem('user');
   localStorage.removeItem('lastSessionId');
+  localStorage.removeItem('serverSessionId');
   setUserRole(null);
+  setUserEmail(null);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -217,6 +227,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Logout ────────────────────────────────────────────
   const logout = async () => {
+    const serverSessionId = localStorage.getItem('serverSessionId');
+    if (serverSessionId) {
+      historyApi.stopSession(serverSessionId).catch(console.error);
+    }
+
     const sessionId = localStorage.getItem('lastSessionId');
     if (sessionId) {
       const history = JSON.parse(localStorage.getItem('loginHistory') || '[]');

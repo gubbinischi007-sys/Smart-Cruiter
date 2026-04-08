@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { applicantsApi, historyApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft, CheckCircle, XCircle, Clock, PartyPopper, AlertCircle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { ArrowLeft, CheckCircle, XCircle, Clock, PartyPopper, AlertCircle, Sparkles, UserCheck, Calendar } from 'lucide-react';
 import './ApplicationStatus.css';
 
 interface Application {
@@ -17,6 +18,8 @@ interface Application {
     offer_status?: string;
     offer_notes?: string;
     offer_rules?: string;
+    rejection_reason?: string;
+    score?: number;
 }
 
 export default function ApplicationStatus() {
@@ -25,12 +28,6 @@ export default function ApplicationStatus() {
     const [application, setApplication] = useState<Application | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        if (id) {
-            loadApplication();
-        }
-    }, [id]);
-
     const loadApplication = async () => {
         try {
             const response = await applicantsApi.getById(id!);
@@ -38,20 +35,16 @@ export default function ApplicationStatus() {
         } catch (error) {
             console.warn('Applicant record not found, identifying via history fallback...');
             try {
-                // Check history for this user and applicant ID (we might need to match by job title instead if ID isn't in history)
                 const historyRes = await historyApi.getAll(user.email!);
                 const history = historyRes.data || [];
-
-                // Since we don't have job title yet in this fetch context, we'll try to find any history record 
-                // that matches this specific "missing" application flow
-                const historyRecord = history[0]; // Simplification: get most recent
+                const historyRecord = history[0]; 
 
                 if (historyRecord) {
                     setApplication({
                         id: id!,
                         email: user.email!,
                         job_title: historyRecord.job_title,
-                        stage: historyRecord.status === 'Accepted' ? 'hired' : 'declined',
+                        stage: historyRecord.status === 'Accepted' ? 'hired' : 'rejected',
                         status: 'archived',
                         applied_at: historyRecord.date,
                         offer_status: historyRecord.status.toLowerCase()
@@ -65,7 +58,33 @@ export default function ApplicationStatus() {
         }
     };
 
+    useEffect(() => {
+        if (id) {
+            loadApplication();
 
+            // REAL-TIME SUBSCRIPTION
+            const channel = supabase
+                .channel(`app-status-${id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'applicants',
+                        filter: `id=eq.${id}`,
+                    },
+                    (payload) => {
+                        console.log('Real-time update received:', payload);
+                        setApplication(prev => ({ ...prev, ...payload.new } as Application));
+                    }
+                )
+                .subscribe();
+
+            return () => {
+                supabase.removeChannel(channel);
+            };
+        }
+    }, [id]);
 
     if (loading) return <div className="loading-container">Loading status...</div>;
 
@@ -80,6 +99,18 @@ export default function ApplicationStatus() {
 
     const isHired = application.stage === 'hired';
     const isRejected = application.stage === 'declined' || application.stage === 'withdrawn' || application.stage === 'rejected';
+
+    // Timeline Configuration
+    const stagesOrdered = ['applied', 'shortlisted', 'interview', 'recommended', 'hired'];
+    const currentStageIndex = stagesOrdered.indexOf(application.stage.toLowerCase());
+
+    const timelineStages = [
+        { key: 'applied', label: 'Application Submitted', icon: CheckCircle, desc: 'Your profile has been received.' },
+        { key: 'shortlisted', label: 'Resume AI Match', icon: Sparkles, desc: 'Screening for technical alignment.' },
+        { key: 'interview', label: 'Interview Process', icon: Calendar, desc: 'Technical & cultural evaluation.' },
+        { key: 'recommended', label: 'Final Recommendation', icon: UserCheck, desc: 'Review by senior leadership.' },
+        { key: 'hired', label: 'Hiring Decision', icon: PartyPopper, desc: 'Final outcome is issued.' }
+    ];
 
     return (
         <div className="status-page animate-fade-in">
@@ -101,9 +132,6 @@ export default function ApplicationStatus() {
                             </div>
                             <h2>Congratulations!</h2>
                             <p>You have been hired for this position. Our team will contact you soon with the next steps.</p>
-                            <div className="celebration-icon">
-                                <PartyPopper size={32} />
-                            </div>
                         </div>
                     ) : isRejected ? (
                         <div className="result-box danger">
@@ -111,7 +139,14 @@ export default function ApplicationStatus() {
                                 <XCircle size={48} />
                             </div>
                             <h2>Application Update</h2>
-                            <p>Thank you for your interest. At this time, we have decided to move forward with other candidates.</p>
+                            <p>We appreciate your interest. At this time, we are moving forward with other candidates.</p>
+                            {application.rejection_reason && (
+                                <div className="rejection-reason-box" style={{ marginTop: '1.5rem', padding: '1.25rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.2)', textAlign: 'left' }}>
+                                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#fca5a5', lineHeight: '1.6' }}>
+                                        <strong style={{ color: '#ef4444', display: 'block', marginBottom: '0.25rem' }}>HR Feedback:</strong> {application.rejection_reason}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="result-box processing">
@@ -119,61 +154,83 @@ export default function ApplicationStatus() {
                                 <Clock size={48} />
                             </div>
                             <h2>Under Review</h2>
-                            <p>Your application is currently being reviewed by our hiring team. Current stage: <strong>{application.stage}</strong></p>
+                            <p>Your application is currently being reviewed. Current stage: <strong style={{ textTransform: 'capitalize', color: '#818cf8' }}>{application.stage}</strong></p>
+                            
+                            {application.stage === 'shortlisted' && (
+                                <div style={{ marginTop: '1.5rem', padding: '1.5rem', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '12px', textAlign: 'center' }}>
+                                    <h3 style={{ margin: '0 0 0.5rem', color: '#818cf8' }}>Action Required: Interview</h3>
+                                    <p className="text-muted" style={{ fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+                                        Congratulations! You have been shortlisted. Please schedule your initial interview below.
+                                    </p>
+                                    <a 
+                                        href="https://cal.com/raksh-smart-cruiter/30min" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="btn btn-primary"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '0.75rem 1.5rem' }}
+                                    >
+                                        <Calendar size={18} /> Schedule Interview (30 min)
+                                    </a>
+                                </div>
+                            )}
                         </div>
                     )}
 
-                    {application.offer_status === 'pending' && (
+                    {application.offer_status === 'pending' && !isRejected && (
                         <div className="offer-letter-container animate-fade-in" style={{ marginTop: '2rem', padding: '2rem', background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '1rem', textAlign: 'center' }}>
                             <div style={{ display: 'inline-block', background: '#6366f1', color: 'white', padding: '1rem', borderRadius: '50%', marginBottom: '1rem' }}>
                                 <PartyPopper size={32} />
                             </div>
                             <h2 style={{ marginBottom: '0.5rem' }}>Job Offer Received!</h2>
-                            <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
-                                Congratulations! You have received a job offer for this position.
-                            </p>
-                            <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem', display: 'inline-block' }}>
-                                <p style={{ margin: 0 }}>Please check your <strong>Inbox</strong> to view the full offer details and take action.</p>
-                                <Link
-                                    to="/candidate/emails"
-                                    className="btn btn-primary"
-                                    style={{ marginTop: '1rem', display: 'inline-block' }}
-                                >
-                                    Go to Inbox
-                                </Link>
-                            </div>
+                            <p className="text-muted" style={{ marginBottom: '1.5rem' }}>Congratulations! Check your inbox to view full details.</p>
+                            <Link to="/candidate/emails" className="btn btn-primary">Go to Inbox</Link>
                         </div>
                     )}
                 </div>
 
                 <div className="status-timeline">
-                    <div className="timeline-item completed">
-                        <div className="timeline-marker"></div>
-                        <div className="timeline-content">
-                            <h3>Application Received</h3>
-                            <p>Your application was successfully submitted.</p>
-                        </div>
-                    </div>
+                    {timelineStages.map((stage, index) => {
+                        const isCompleted = index < currentStageIndex || isHired;
+                        const isActive = index === currentStageIndex && !isHired && !isRejected;
+                        const isTerminal = (isHired || isRejected) && index === 4;
+                        const Icon = stage.icon;
 
-                    {application.stage !== 'applied' && (
-                        <div className="timeline-item completed">
-                            <div className="timeline-marker"></div>
-                            <div className="timeline-content">
-                                <h3>Initial Screening</h3>
-                                <p>Hiring team review.</p>
-                            </div>
-                        </div>
-                    )}
+                        let statusClass = '';
+                        if (isCompleted) statusClass = 'completed';
+                        if (isActive) statusClass = 'active';
+                        if (isRejected && index === currentStageIndex) statusClass = 'completed danger';
+                        
+                        // Handle Rejection at any stage
+                        if (isRejected && index >= currentStageIndex) {
+                            if (index === currentStageIndex) {
+                                return (
+                                    <div key={stage.key} className="timeline-item completed danger">
+                                        <div className="timeline-marker"><XCircle size={14} /></div>
+                                        <div className="timeline-content">
+                                            <h3 style={{ color: '#ef4444' }}>Process Stopped</h3>
+                                            <p>Application was not selected after this stage.</p>
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return null; // Don't show future stages after rejection
+                        }
 
-                    {(isHired || isRejected) && (
-                        <div className={`timeline-item completed ${isHired ? 'success' : 'danger'}`}>
-                            <div className="timeline-marker"></div>
-                            <div className="timeline-content">
-                                <h3>Final Decision</h3>
-                                <p>{isHired ? 'Hiring completed.' : 'Selection finalized.'}</p>
+                        return (
+                            <div key={stage.key} className={`timeline-item ${statusClass}`}>
+                                <div className="timeline-marker">
+                                    {(isCompleted || isTerminal) ? <CheckCircle size={14} /> : (isActive ? <div className="dot"></div> : null)}
+                                </div>
+                                <div className="timeline-content">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Icon size={16} color={(isCompleted || isActive) ? (index === 4 && isHired ? '#10b981' : '#818cf8') : '#4b5563'} />
+                                        <h3>{stage.label}</h3>
+                                    </div>
+                                    <p>{stage.desc}</p>
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })}
                 </div>
             </div>
         </div>

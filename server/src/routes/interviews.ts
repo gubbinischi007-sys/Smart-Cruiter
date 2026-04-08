@@ -5,6 +5,7 @@ import { run, get, all } from '../database.js';
 import { Interview, CreateInterviewInput, UpdateInterviewInput } from '../models/interview.js';
 import { sendEmail } from '../services/email.js';
 import { format, addHours } from 'date-fns';
+import { logHrAction } from '../services/activityLogger.js';
 
 const router = express.Router();
 
@@ -169,6 +170,10 @@ router.post('/', async (req, res) => {
     });
 
     const interview = await get<Interview>('SELECT * FROM interviews WHERE id = ?', [id]);
+    
+    // Log action
+    await logHrAction(req, `Scheduled ${input.type || 'online'} interview for ${applicant.first_name} ${applicant.last_name} (${job.title})`);
+
     res.status(201).json(interview);
   } catch (error) {
     console.error('Error creating interview:', error);
@@ -238,6 +243,10 @@ router.put('/:id', async (req, res) => {
       await run(`UPDATE applicants SET stage = 'recommended', updated_at = ? WHERE id = ?`, [new Date().toISOString(), existing.applicant_id]);
       console.log(`Applicant ${existing.applicant_id} auto-promoted to recommended due to high rating (${input.rating})`);
     }
+
+    // Log action
+    const details = await get<any>('SELECT a.first_name, a.last_name FROM applicants a WHERE id = ?', [existing.applicant_id]);
+    await logHrAction(req, `Updated interview status to ${input.status || 'updated'} for ${details?.first_name || 'candidate'} ${details?.last_name || ''}`);
 
     res.json(updated);
   } catch (error) {
