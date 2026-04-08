@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { all, run } from '../database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '../lib/supabase.js';
 
 const router = Router();
 
@@ -94,12 +95,22 @@ router.delete('/:id', async (req, res) => {
 router.get('/activity', async (req, res) => {
     try {
         const companyId = req.headers['x-company-id'];
+        const userEmail = req.headers['x-user-email'];
+        
         let query = 'SELECT * FROM hr_activity_logs WHERE 1=1';
         const params: any[] = [];
 
-        if (companyId) {
+        // If we have a company ID, filter by it OR by the user's email 
+        // (to catch logs made before the company was officially linked/verified)
+        if (companyId && userEmail) {
+            query += ' AND (company_id = ? OR user_email = ?)';
+            params.push(companyId, userEmail);
+        } else if (companyId) {
             query += ' AND company_id = ?';
             params.push(companyId);
+        } else if (userEmail) {
+            query += ' AND user_email = ?';
+            params.push(userEmail);
         }
 
         query += ' ORDER BY created_at DESC LIMIT 500';
@@ -115,12 +126,20 @@ router.get('/activity', async (req, res) => {
 router.get('/sessions', async (req, res) => {
     try {
         const companyId = req.headers['x-company-id'];
+        const userEmail = req.headers['x-user-email'];
+        
         let query = 'SELECT * FROM user_sessions WHERE 1=1';
         const params: any[] = [];
 
-        if (companyId) {
+        if (companyId && userEmail) {
+            query += ' AND (company_id = ? OR user_email = ?)';
+            params.push(companyId, userEmail);
+        } else if (companyId) {
             query += ' AND company_id = ?';
             params.push(companyId);
+        } else if (userEmail) {
+            query += ' AND user_email = ?';
+            params.push(userEmail);
         }
 
         query += ' ORDER BY login_time DESC LIMIT 100';
@@ -134,10 +153,20 @@ router.get('/sessions', async (req, res) => {
 
 router.post('/sessions/start', async (req, res) => {
     const { email } = req.body;
-    const companyId = req.headers['x-company-id'];
+    let companyId = req.headers['x-company-id'];
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
     try {
+        // FALLBACK: If companyId is missing (e.g. initial login), try to find it via user_profiles
+        if (!companyId) {
+            const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('company_id')
+                .eq('email', email)
+                .single();
+            if (profile?.company_id) companyId = profile.company_id;
+        }
+
         const id = uuidv4();
         await run(
             'INSERT INTO user_sessions (id, user_email, company_id, login_time) VALUES (?, ?, ?, ?)',
@@ -145,6 +174,7 @@ router.post('/sessions/start', async (req, res) => {
         );
         res.json({ sessionId: id });
     } catch (error) {
+        console.error('Session start error:', error);
         res.status(500).json({ error: 'Failed to start session' });
     }
 });
