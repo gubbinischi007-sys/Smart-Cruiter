@@ -95,20 +95,19 @@ router.delete('/:id', async (req, res) => {
 router.get('/activity', async (req, res) => {
     try {
         const companyId = req.headers['x-company-id'];
-        const userEmail = req.headers['x-user-email'] as string;
+        const userEmail = (req.headers['x-user-email'] as string || '').toLowerCase();
         
-        // Use parameterized query with LOWER for case-insensitive email matching
         let query = 'SELECT * FROM hr_activity_logs WHERE 1=1';
         const params: any[] = [];
 
         if (companyId && userEmail) {
-            query += ' AND (company_id = ? OR LOWER(user_email) = LOWER(?))';
+            query += ' AND (company_id = ? OR user_email = ?)';
             params.push(companyId, userEmail);
         } else if (companyId) {
             query += ' AND company_id = ?';
             params.push(companyId);
         } else if (userEmail) {
-            query += ' AND LOWER(user_email) = LOWER(?)';
+            query += ' AND user_email = ?';
             params.push(userEmail);
         }
 
@@ -125,19 +124,19 @@ router.get('/activity', async (req, res) => {
 router.get('/sessions', async (req, res) => {
     try {
         const companyId = req.headers['x-company-id'];
-        const userEmail = req.headers['x-user-email'] as string;
+        const userEmail = (req.headers['x-user-email'] as string || '').toLowerCase();
         
         let query = 'SELECT * FROM user_sessions WHERE 1=1';
         const params: any[] = [];
 
         if (companyId && userEmail) {
-            query += ' AND (company_id = ? OR LOWER(user_email) = LOWER(?))';
+            query += ' AND (company_id = ? OR user_email = ?)';
             params.push(companyId, userEmail);
         } else if (companyId) {
             query += ' AND company_id = ?';
             params.push(companyId);
         } else if (userEmail) {
-            query += ' AND LOWER(user_email) = LOWER(?)';
+            query += ' AND user_email = ?';
             params.push(userEmail);
         }
 
@@ -151,17 +150,18 @@ router.get('/sessions', async (req, res) => {
 });
 
 router.post('/sessions/start', async (req, res) => {
-    const { email } = req.body;
+    const rawEmail = req.body.email;
+    const email = (rawEmail || '').toLowerCase();
     let companyId = req.headers['x-company-id'];
+    
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
     try {
-        // Normalizing search email to lowercase for profile lookup
         if (!companyId) {
             const { data: profile } = await supabase
                 .from('user_profiles')
                 .select('company_id')
-                .ilike('email', email) // ilike is case-insensitive in Postgres
+                .ilike('email', email)
                 .single();
             if (profile?.company_id) companyId = profile.company_id;
         }
