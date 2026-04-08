@@ -74,19 +74,14 @@ api.post('/jobs', async (req: any, res: any) => {
         if (!companyId) return res.status(400).json({ error: 'Company ID is missing.' });
         const { title, department, location, type, description, requirements, status } = req.body;
         if (!title) return res.status(400).json({ error: 'Job title is required.' });
-
         const { data: comp } = await sb.from('companies').select('status').eq('id', companyId).single();
-        if (!comp || comp.status !== 'approved') {
-            await sb.from('companies').update({ status: 'approved' }).eq('id', companyId);
-        }
-
+        if (!comp || comp.status !== 'approved') await sb.from('companies').update({ status: 'approved' }).eq('id', companyId);
         const now = new Date().toISOString();
         const { data, error } = await sb.from('jobs').insert({
             id: uuidv4(), title, department: department || null, location: location || null,
             type: type || null, description: description || null, requirements: requirements || null,
             status: status || 'open', company_id: companyId, created_at: now, updated_at: now
         }).select().single();
-
         if (error) throw new Error(error.message);
         res.status(201).json(data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -97,17 +92,19 @@ api.get('/applicants', async (req: any, res: any) => {
     try {
         const { job_id, stage, status, email } = req.query;
         const companyId = req.headers['x-company-id'];
-        let q = sb.from('applicants').select('*, jobs!inner(company_id)').order('applied_at', { ascending: false });
-        if (email) q = q.eq('email', email);
+        let q = sb.from('applicants').select('*, jobs!inner(company_id, title)').order('applied_at', { ascending: false });
+        
+        // CASE-INSENSITIVE EMAIL FILTER
+        if (email) q = q.ilike('email', email);
         if (job_id) q = q.eq('job_id', job_id);
         if (stage) q = q.eq('stage', stage);
         if (status) q = q.eq('status', status);
         if (companyId) q = q.eq('jobs.company_id', companyId);
+        
         const { data, error } = await q;
         if (error) throw new Error(error.message);
-        const { data: jobs } = await sb.from('jobs').select('id, title');
-        const jobsMap = Object.fromEntries((jobs || []).map((j: any) => [j.id, j.title]));
-        res.json((data || []).map((a: any) => ({ ...a, job_title: jobsMap[a.job_id] || 'N/A' })));
+        
+        res.json((data || []).map((a: any) => ({ ...a, job_title: a.jobs?.title || 'Unknown Position' })));
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
@@ -115,32 +112,23 @@ api.post('/applicants', upload.single('resume'), async (req: any, res: any) => {
     try {
         const { job_id, first_name, last_name, email, phone, resume_url, cover_letter } = req.body;
         if (!job_id || !first_name || !last_name || !email) return res.status(400).json({ error: 'Missing required fields' });
-        
         let resumeText = '';
         if (req.file) { try { const p = await pdf(req.file.buffer); resumeText = p.text || ''; } catch (err) { } }
-        
         const { data: job } = await sb.from('jobs').select('*').eq('id', job_id).single();
         if (!job || job.status !== 'open') return res.status(400).json({ error: 'Job not found or closed.' });
-        
         const now = new Date().toISOString();
         const id = uuidv4();
-        
         const applicantData: any = {
             id, job_id, first_name, last_name, email, phone: phone || null,
             resume_url: resume_url || null, cover_letter: cover_letter || null,
             stage: 'applied', status: 'active', applied_at: now, updated_at: now
         };
-
-        // Attempt to insert with resume_text, if it fails, insert without it
         const { data, error } = await sb.from('applicants').insert({ ...applicantData, resume_text: resumeText }).select().single();
-        
         if (error) {
-            console.warn('Initial insert failed, retrying without resume_text:', error.message);
             const { data: retryData, error: retryError } = await sb.from('applicants').insert(applicantData).select().single();
             if (retryError) throw new Error(retryError.message);
             return res.status(201).json(retryData);
         }
-
         res.status(201).json(data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });

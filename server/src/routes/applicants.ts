@@ -17,45 +17,55 @@ router.get('/', async (req, res) => {
   try {
     const { job_id, stage, status, email } = req.query;
     const companyId = req.headers['x-company-id'];
-    let query = `
-      SELECT a.*, j.title as job_title 
-      FROM applicants a 
-      LEFT JOIN jobs j ON a.job_id = j.id 
-      WHERE 1=1
-    `;
+    
+    // Fetch applicants directly from table using shim-friendly logic
     const params: any[] = [];
-
-    if (companyId) {
-      query += ' AND j.company_id = ?';
-      params.push(companyId);
-    }
-
+    let query = 'SELECT * FROM applicants WHERE 1=1';
+    
     if (email) {
-      query += ' AND a.email = ?';
+      query += ' AND email = ?';
       params.push(email);
     }
     if (job_id) {
-      query += ' AND a.job_id = ?';
+      query += ' AND job_id = ?';
       params.push(job_id);
     }
     if (stage) {
-      query += ' AND a.stage = ?';
+      query += ' AND stage = ?';
       params.push(stage);
     }
     if (status) {
-      query += ' AND a.status = ?';
+      query += ' AND status = ?';
       params.push(status);
     }
 
-    query += ' ORDER BY a.applied_at DESC';
+    query += ' ORDER BY applied_at DESC';
 
-    const applicants = await all<any>(query, params);
-    res.json(applicants);
+    let applicants = await all<any>(query, params);
+
+    // If we have an email but 0 results, retry with lowercase (case-insensitivity fallback)
+    if (email && applicants.length === 0) {
+      applicants = await all<any>('SELECT * FROM applicants WHERE LOWER(email) = ?', [(email as string).toLowerCase()]);
+    }
+
+    // Attach job titles manually (shim doesn't handle JOINS well)
+    const jobs = await all<any>('SELECT id, title, company_id FROM jobs');
+    const jobsMap = Object.fromEntries(jobs.map(j => [j.id, j]));
+
+    const result = applicants
+      .filter(a => !companyId || (jobsMap[a.job_id] && jobsMap[a.job_id].company_id === companyId))
+      .map(a => ({
+        ...a,
+        job_title: jobsMap[a.job_id]?.title || 'Unknown Position'
+      }));
+
+    res.json(result);
   } catch (error) {
     console.error('Error fetching applicants:', error);
     res.status(500).json({ error: 'Failed to fetch applicants' });
   }
 });
+
 
 // Retroactive Sync of Stages for ALL existing applicants
 router.get('/sync-all', async (req, res) => {
