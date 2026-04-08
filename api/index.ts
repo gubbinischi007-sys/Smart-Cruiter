@@ -77,9 +77,23 @@ api.get('/health', (_req: any, res: any) => res.json({ status: 'ok', db: 'supaba
 api.get('/jobs', async (req: any, res: any) => {
     try {
         const companyId = req.headers['x-company-id'];
+        const status = req.query.status;
+        
+        // Base query
         let q = sb.from('jobs').select('*').order('created_at', { ascending: false });
-        if (req.query.status) q = q.eq('status', req.query.status);
-        if (companyId) q = q.eq('company_id', companyId);
+        
+        if (status) {
+            q = q.eq('status', status);
+            // If it's the public candidate view (status=open), we usually want ALL jobs
+            // so we only apply company filter if it's NOT just the public view
+            if (status !== 'open' && companyId) {
+                q = q.eq('company_id', companyId);
+            }
+        } else if (companyId) {
+            // If no status but companyId provided (Admin side), filter by company
+            q = q.eq('company_id', companyId);
+        }
+
         const { data, error } = await q;
         if (error) throw error;
         res.json(data || []);
