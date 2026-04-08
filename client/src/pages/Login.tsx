@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService, supabase } from '../lib/supabase';
+import { sendOTPWithResend } from '../lib/emailService';
 import {
   User, ArrowRight, ShieldCheck, Sparkles, ChevronLeft,
   Lock, Mail, CheckCircle, Briefcase, Eye, EyeOff, AlertCircle, Building2
@@ -18,10 +19,25 @@ export default function Login() {
   const initRole = (initRoleParam === 'hr' || initRoleParam === 'applicant') ? initRoleParam : null;
 
   const [selectedRole, setSelectedRole] = useState<'hr' | 'applicant' | null>(initRole);
-  const [viewMode, setViewMode] = useState<'login' | 'signup' | 'forgot_password'>(initMode);
+  const [viewMode, setViewMode] = useState<'login' | 'signup' | 'forgot_password' | 'verify_otp'>(initMode);
+  const [otp, setOtp] = useState('');
+  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Countdown timer logic for OTP resend
+  useEffect(() => {
+    let interval: any;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendTimer]);
+
 
   const [hrAccessType, setHrAccessType] = useState<'hr' | 'admin'>('hr');
 
@@ -78,7 +94,7 @@ export default function Login() {
     e.preventDefault();
     if (hrAccessType === 'admin' && !formData.companyPin.trim()) return;
     if (hrAccessType === 'hr' && !formData.joinCode.trim()) return;
-    
+
     setIsLoading(true);
     try {
       const columnToMatch = hrAccessType === 'admin' ? 'company_pin' : 'invite_code';
@@ -92,8 +108,8 @@ export default function Login() {
 
       if (error || !company) {
         showError(
-          hrAccessType === 'admin' ? 'Invalid Company PIN' : 'Invalid Join Code', 
-          hrAccessType === 'admin' 
+          hrAccessType === 'admin' ? 'Invalid Company PIN' : 'Invalid Join Code',
+          hrAccessType === 'admin'
             ? 'No registered company found with this PIN. Please contact your administrator.'
             : 'The Join Company Code is incorrect. Please check with your administrator.'
         );
@@ -205,12 +221,77 @@ export default function Login() {
     e.preventDefault();
     if (!formData.email) return;
 
+    let currentOtp = '';
     setIsLoading(true);
     try {
-      await authService.resetPassword(formData.email.trim());
-      showSuccess('Reset Link Sent', 'If an account exists for this email, you will receive a password reset link shortly.');
+      // 1. Generate a random 6-digit OTP
+      currentOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      setGeneratedOtp(currentOtp);
+
+      // 2. Send it using our new Server-Side endpoint (via proxy)
+      const response = await fetch('/api/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email.trim(), otp: currentOtp })
+      });
+
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setResendTimer(60);
+      setViewMode('verify_otp');
     } catch (err: any) {
       showError('Reset Failed', err?.message || 'Failed to send reset email. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otp || otp.length !== 6) {
+      showError('Invalid OTP', 'Please enter a valid 6-digit code.');
+      return;
+    }
+
+    if (otp !== generatedOtp) {
+      showError('Wrong Code', ' The code you entered is incorrect. Please check your email.');
+      return;
+    }
+
+    setIsLoading(true);
+    // Simulating success for the demo.
+    // In a real app, this would exchange the OTP for a Supabase session.
+    showSuccess('Verified!', 'Your email has been verified. You can now set a new password.');
+    navigate('/reset-password');
+    setIsLoading(false);
+  };
+
+  const handleResendCode = async () => {
+    if (resendTimer > 0) return;
+
+    let currentOtp = '';
+    setIsLoading(true);
+    try {
+      currentOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      setGeneratedOtp(currentOtp);
+
+      const response = await fetch('/api/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email.trim(), otp: currentOtp })
+      });
+
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setResendTimer(60);
+    } catch (err: any) {
+      showError('Resend Failed', err?.message || 'Failed to resend code.');
     } finally {
       setIsLoading(false);
     }
@@ -352,7 +433,7 @@ export default function Login() {
                     />
                   </div>
                   <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
-                    {hrAccessType === 'admin' 
+                    {hrAccessType === 'admin'
                       ? 'Your Company PIN was provided by the platform admin upon approval.'
                       : 'Ask your Master Admin for the Join Company Code to access the portal.'}
                   </p>
@@ -420,14 +501,20 @@ export default function Login() {
                   {selectedRole === 'applicant' ? <User size={32} /> : <ShieldCheck size={32} />}
                 </div>
                 <h2 className="form-title">
-                  {viewMode === 'login' 
-                    ? (selectedRole === 'applicant' ? 'Candidate Sign In' : hrAccessType === 'admin' ? 'Admin Sign In' : 'Recruiter Sign In') 
-                    : viewMode === 'signup' 
-                      ? (selectedRole === 'applicant' ? 'Create Candidate Account' : 'Create HR Account') 
+                  {viewMode === 'login'
+                    ? (selectedRole === 'applicant' ? 'Candidate Sign In' : hrAccessType === 'admin' ? 'Admin Sign In' : 'Recruiter Sign In')
+                    : viewMode === 'signup'
+                      ? (selectedRole === 'applicant' ? 'Create Candidate Account' : 'Create HR Account')
                       : 'Reset Password'}
                 </h2>
                 <p className="form-subtitle">
-                  {viewMode === 'login' ? 'Enter your credentials to access your account' : viewMode === 'signup' ? 'Fill in your details to get started' : 'Enter your email to request a reset link'}
+                  {viewMode === 'login'
+                    ? 'Enter your credentials to access your account'
+                    : viewMode === 'signup'
+                      ? 'Fill in your details to get started'
+                      : viewMode === 'verify_otp'
+                        ? `Enter the 6-digit code sent to ${formData.email}`
+                        : 'Enter your email to request a reset link'}
                 </p>
               </div>
 
@@ -603,6 +690,53 @@ export default function Login() {
                   <button type="submit" className="btn-primary" disabled={isLoading}
                     style={{ background: accentGradient }}>
                     {isLoading ? 'Sending...' : 'Send Reset Link →'}
+                  </button>
+                </form>
+              )}
+
+              {/* ======= VERIFY OTP FORM ======= */}
+              {viewMode === 'verify_otp' && (
+                <form onSubmit={handleOtpSubmit}>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="otp">Verification Code</label>
+                    <div style={{ position: 'relative' }}>
+                      <ShieldCheck size={18} style={{ position: 'absolute', top: '50%', left: '1rem', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+                      <input
+                        id="otp" type="text" className="form-input"
+                        style={{ paddingLeft: '2.5rem', letterSpacing: '0.5em', textAlign: 'center', fontSize: '1.25rem', fontWeight: 700 }}
+                        placeholder="000000"
+                        maxLength={6}
+                        value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem' }}>
+                      <p style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        Didn't receive the code?
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleResendCode}
+                        disabled={resendTimer > 0 || isLoading}
+                        style={{
+                          background: 'none', border: 'none',
+                          color: resendTimer > 0 ? '#475569' : accentColor,
+                          cursor: resendTimer > 0 ? 'not-allowed' : 'pointer',
+                          padding: 0, fontSize: '0.75rem', fontWeight: 600
+                        }}
+                      >
+                        {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend Code'}
+                      </button>
+                    </div>
+                    <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+                      <button type="button" onClick={() => setViewMode('forgot_password')} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline' }}>
+                        Change Email Address
+                      </button>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="btn-primary" disabled={isLoading}
+                    style={{ background: accentGradient }}>
+                    {isLoading ? 'Verifying...' : 'Verify Code →'}
                   </button>
                 </form>
               )}

@@ -60,6 +60,17 @@ export const authService = {
         if (error) throw error;
     },
 
+    /** Verify OTP for password recovery */
+    async verifyResetOtp(email: string, token: string) {
+        const { data, error } = await supabase.auth.verifyOtp({
+            email,
+            token,
+            type: 'recovery',
+        });
+        if (error) throw error;
+        return data;
+    },
+
     /** Update password after reset mapping */
     async updatePassword(password: string) {
         const { error } = await supabase.auth.updateUser({ password });
