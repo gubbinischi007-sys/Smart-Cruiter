@@ -66,7 +66,20 @@ router.get('/', isMasterAdmin, async (req, res) => {
       };
     });
 
-    res.json(enriched);
+    // 5. Fetch pending invitations
+    const { data: invites } = await supabase
+      .from('hr_invitations')
+      .select('id, email, role_title, created_at')
+      .eq('company_id', companyId)
+      .eq('status', 'pending');
+
+    const pendingMembers = (invites || []).map((inv: any) => ({
+      ...inv,
+      name: 'Pending...',
+      status: 'pending',
+    }));
+
+    res.json([...enriched, ...pendingMembers]);
   } catch (err: any) {
     console.error('Error fetching HR team:', err);
     res.status(500).json({ error: 'Failed to fetch HR team.' });
@@ -206,22 +219,35 @@ router.delete('/:id', isMasterAdmin, async (req, res) => {
   const companyId = req.headers['x-company-id'] as string;
 
   try {
-    const { data: profile, error: profileErr } = await supabase
+    // 1. Check if it's a regular user profile
+    const { data: profile } = await supabase
       .from('user_profiles')
       .select('id, name')
       .eq('id', id)
       .eq('company_id', companyId)
       .single();
 
-    if (profileErr || !profile) return res.status(404).json({ error: 'HR member not found.' });
+    if (profile) {
+      // Delete from auth and user_profiles
+      await supabase.auth.admin.deleteUser(id);
+      await supabase.from('user_profiles').delete().eq('id', id);
+      return res.json({ message: `${profile.name} has been permanently deleted.` });
+    }
 
-    // Delete from auth — profile row will cascade or we clean it up manually
-    const { error: deleteAuthError } = await supabase.auth.admin.deleteUser(id);
-    if (deleteAuthError) throw deleteAuthError;
+    // 2. Check if it's a pending invitation
+    const { data: invite } = await supabase
+      .from('hr_invitations')
+      .select('id, email')
+      .eq('id', id)
+      .eq('company_id', companyId)
+      .single();
 
-    await supabase.from('user_profiles').delete().eq('id', id);
+    if (invite) {
+      await supabase.from('hr_invitations').delete().eq('id', id);
+      return res.json({ message: `Invitation for ${invite.email} has been cancelled.` });
+    }
 
-    res.json({ message: `${profile.name} has been permanently deleted.` });
+    res.status(404).json({ error: 'Member or Invitation not found.' });
   } catch (err: any) {
     console.error('Error deleting HR member:', err);
     res.status(500).json({ error: err?.message || 'Failed to delete HR member.' });

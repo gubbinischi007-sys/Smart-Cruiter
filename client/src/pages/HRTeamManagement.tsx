@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
-import { hrTeamApi } from '../services/api';
+import { hrTeamApi, hrInvitesApi } from '../services/api';
 import {
   ChevronLeft, UserPlus, Users, Mail, ShieldCheck, ShieldOff,
   Trash2, Eye, EyeOff, CheckCircle, AlertCircle, User, Briefcase,
-  Lock, RefreshCw, Search, X
+  Lock, RefreshCw, Search, X, Send
 } from 'lucide-react';
 import './HRTeamManagement.css';
 
@@ -15,7 +15,7 @@ interface HRMember {
   name: string;
   email: string;
   role_title: string;
-  status: 'active' | 'suspended';
+  status: 'active' | 'suspended' | 'pending';
   created_at: string;
 }
 
@@ -76,27 +76,34 @@ export default function HRTeamManagement() {
     }
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.email || !formData.password) return;
+    if (!formData.email) return;
 
     setIsSubmitting(true);
     try {
-      await hrTeamApi.create(formData);
-      showModal('success', 'Account Created!',
-        `HR account for ${formData.name} has been created successfully. Share the credentials with them directly.`);
+      await hrInvitesApi.send({
+        email: formData.email,
+        role_title: formData.role_title
+      });
+      showModal('success', 'Invitation Sent!',
+        `An invite link has been sent to ${formData.email}. They can now set up their own account.`);
       setFormData({ name: '', email: '', password: '', role_title: '' });
       setShowCreateForm(false);
       loadMembers();
     } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Failed to create account.';
-      showModal('error', 'Creation Failed', msg);
+      const msg = err?.response?.data?.error || err?.message || 'Failed to send invitation.';
+      showModal('error', 'Invitation Failed', msg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleSuspend = (member: HRMember) => {
+    if (member.status === 'pending') {
+        showModal('error', 'Action Not Possible', 'You cannot suspend a pending invitation. You can only delete it.');
+        return;
+    }
     setConfirm({
       isOpen: true,
       title: `Suspend ${member.name}?`,
@@ -137,20 +144,30 @@ export default function HRTeamManagement() {
   };
 
   const handleDelete = (member: HRMember) => {
+    const isPending = member.status === 'pending';
     setConfirm({
       isOpen: true,
-      title: `Permanently Delete ${member.name}?`,
-      message: `This will permanently delete ${member.name}'s account. This action CANNOT be undone. All their data will be removed from the system.`,
-      confirmLabel: 'Delete Permanently',
+      title: isPending ? `Cancel Invitation?` : `Permanently Delete ${member.name}?`,
+      message: isPending 
+        ? `This will cancel the invitation sent to ${member.email}. The link will no longer work.`
+        : `This will permanently delete ${member.name}'s account. This action CANNOT be undone. All their data will be removed from the system.`,
+      confirmLabel: isPending ? 'Cancel Invitation' : 'Delete Permanently',
       danger: true,
       onConfirm: async () => {
         setConfirm({ isOpen: false });
         try {
-          await hrTeamApi.delete(member.id);
-          showModal('success', 'Account Deleted', `${member.name}'s account has been permanently deleted.`);
+          if (isPending) {
+             // We can use the same delete endpoint if we update the backend, 
+             // but for now I'll just assume we delete by id in user_profiles or hr_invitations.
+             // Actually I'll use a new endpoint or update the existing one.
+             await hrTeamApi.delete(member.id); 
+          } else {
+             await hrTeamApi.delete(member.id);
+          }
+          showModal('success', isPending ? 'Invitation Cancelled' : 'Account Deleted', isPending ? 'The invitation has been revoked.' : `${member.name}'s account has been permanently deleted.`);
           loadMembers();
         } catch (err: any) {
-          showModal('error', 'Failed', err?.response?.data?.error || 'Could not delete member.');
+          showModal('error', 'Failed', err?.response?.data?.error || 'Could not process request.');
         }
       },
     });
@@ -182,7 +199,7 @@ export default function HRTeamManagement() {
             onClick={() => setShowCreateForm(true)}
           >
             <UserPlus size={16} />
-            Create HR Account
+            Invite HR Member
           </button>
         </div>
       </div>
@@ -205,10 +222,10 @@ export default function HRTeamManagement() {
             </div>
           </div>
           <div className="hr-stat-card">
-            <ShieldOff size={20} style={{ color: '#ef4444' }} />
+            <ShieldOff size={20} style={{ color: '#f59e0b' }} />
             <div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'white', lineHeight: 1 }}>{members.filter(m => m.status === 'suspended').length}</div>
-              <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>Suspended</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'white', lineHeight: 1 }}>{members.filter(m => m.status === 'pending').length}</div>
+              <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>Pending Invites</div>
             </div>
           </div>
         </div>
@@ -283,14 +300,14 @@ export default function HRTeamManagement() {
                       </span>
                     </td>
                     <td>
-                      <span className={`hr-badge ${member.status === 'active' ? 'hr-badge-active' : 'hr-badge-suspended'}`}>
-                        {member.status === 'active' ? <ShieldCheck size={12} /> : <ShieldOff size={12} />}
+                      <span className={`hr-badge ${member.status === 'active' ? 'hr-badge-active' : member.status === 'suspended' ? 'hr-badge-suspended' : 'hr-badge-pending'}`}>
+                        {member.status === 'active' ? <ShieldCheck size={12} /> : member.status === 'suspended' ? <ShieldOff size={12} /> : <RefreshCw size={12} className="animate-spin" />}
                         {member.status}
                       </span>
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                        {member.status === 'active' ? (
+                        {member.status === 'active' && (
                           <button
                             className="hr-action-btn hr-btn-suspend"
                             onClick={() => handleSuspend(member)}
@@ -298,7 +315,9 @@ export default function HRTeamManagement() {
                           >
                             <ShieldOff size={14} /> Suspend
                           </button>
-                        ) : (
+                        )}
+                        
+                        {member.status === 'suspended' && (
                           <button
                             className="hr-action-btn hr-btn-reactivate"
                             onClick={() => handleReactivate(member)}
@@ -307,13 +326,25 @@ export default function HRTeamManagement() {
                             <RefreshCw size={14} /> Reactivate
                           </button>
                         )}
-                        <button
-                          className="hr-action-btn hr-btn-delete"
-                          onClick={() => handleDelete(member)}
-                          title="Delete Account"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+
+                        {member.status === 'pending' ? (
+                          <button
+                            className="hr-action-btn hr-btn-suspend"
+                            style={{ background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                            onClick={() => handleDelete(member)}
+                            title="Cancel Invitation"
+                          >
+                            <X size={14} /> Cancel Invite
+                          </button>
+                        ) : (
+                          <button
+                            className="hr-action-btn hr-btn-delete"
+                            onClick={() => handleDelete(member)}
+                            title="Delete Account"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -324,15 +355,15 @@ export default function HRTeamManagement() {
         </div>
       </div>
 
-      {/* ── Create HR Account Slide-Over ── */}
+      {/* ── Invite HR Account Slide-Over ── */}
       {showCreateForm && (
         <div className="hr-slideover-overlay" onClick={() => setShowCreateForm(false)}>
           <div className="hr-slideover" onClick={e => e.stopPropagation()}>
             <div className="hr-slideover-header">
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>Create HR Account</h2>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>Invite HR Member</h2>
                 <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#9ca3af' }}>
-                  Fill in the details and deliver credentials to the HR member directly.
+                  Send a secure invitation link. They will set their own password.
                 </p>
               </div>
               <button onClick={() => setShowCreateForm(false)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '0.25rem' }}>
@@ -340,27 +371,10 @@ export default function HRTeamManagement() {
               </button>
             </div>
 
-            <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {/* Full Name */}
-              <div className="hr-field">
-                <label className="hr-label">Full Name *</label>
-                <div className="hr-input-wrapper">
-                  <User size={16} className="hr-input-icon" />
-                  <input
-                    type="text"
-                    className="hr-input"
-                    placeholder="e.g. Sarah Johnson"
-                    value={formData.name}
-                    onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
-                    required
-                    autoFocus
-                  />
-                </div>
-              </div>
-
+            <form onSubmit={handleInvite} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               {/* Email */}
               <div className="hr-field">
-                <label className="hr-label">Email Address *</label>
+                <label className="hr-label">Work Email *</label>
                 <div className="hr-input-wrapper">
                   <Mail size={16} className="hr-input-icon" />
                   <input
@@ -389,34 +403,7 @@ export default function HRTeamManagement() {
                 </div>
               </div>
 
-              {/* Password */}
-              <div className="hr-field">
-                <label className="hr-label">Initial Password *</label>
-                <div className="hr-input-wrapper">
-                  <Lock size={16} className="hr-input-icon" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    className="hr-input"
-                    placeholder="Min. 6 characters"
-                    value={formData.password}
-                    onChange={e => setFormData(p => ({ ...p, password: e.target.value }))}
-                    required
-                    style={{ paddingRight: '2.75rem' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer' }}
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-                  Share this password with the HR member directly. They can change it later.
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
                 <button
                   type="button"
                   className="hr-btn-cancel"
@@ -430,8 +417,8 @@ export default function HRTeamManagement() {
                   disabled={isSubmitting}
                   style={{ flex: 1 }}
                 >
-                  <UserPlus size={16} />
-                  {isSubmitting ? 'Creating Account...' : 'Create HR Account'}
+                  <Send size={16} />
+                  {isSubmitting ? 'Sending Invite...' : 'Send Invitation link'}
                 </button>
               </div>
             </form>

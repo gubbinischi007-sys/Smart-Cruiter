@@ -151,6 +151,14 @@ export const hrTeamApi = {
   delete: (id: string) => api.delete(`/hr-team/${id}`),
 };
 
+export const hrInvitesApi = {
+  send: (data: { email: string; role_title?: string }) =>
+    api.post('/hr-invites/send', data),
+  verify: (token: string) => api.get(`/hr-invites/verify/${token}`),
+  accept: (data: { token: string; name: string; password: string }) =>
+    api.post('/hr-invites/accept', data),
+};
+
 export default api;
 
 
