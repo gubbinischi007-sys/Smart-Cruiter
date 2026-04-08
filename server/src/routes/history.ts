@@ -94,22 +94,11 @@ router.delete('/:id', async (req, res) => {
 
 router.get('/activity', async (req, res) => {
     try {
-        const companyId = req.headers['x-company-id'];
         const userEmail = (req.headers['x-user-email'] as string || '').toLowerCase();
         
-        let query = 'SELECT * FROM hr_activity_logs WHERE 1=1';
-        const params: any[] = [];
-
-        if (companyId && userEmail) {
-            query += ' AND (company_id = ? OR user_email = ?)';
-            params.push(companyId, userEmail);
-        } else if (companyId) {
-            query += ' AND company_id = ?';
-            params.push(companyId);
-        } else if (userEmail) {
-            query += ' AND user_email = ?';
-            params.push(userEmail);
-        }
+        // Use a simple email-only query which is 100% compatible with the Vercel shim
+        let query = 'SELECT * FROM hr_activity_logs WHERE user_email = ?';
+        const params: any[] = [userEmail];
 
         query += ' ORDER BY created_at DESC LIMIT 500';
 
@@ -123,22 +112,10 @@ router.get('/activity', async (req, res) => {
 
 router.get('/sessions', async (req, res) => {
     try {
-        const companyId = req.headers['x-company-id'];
         const userEmail = (req.headers['x-user-email'] as string || '').toLowerCase();
         
-        let query = 'SELECT * FROM user_sessions WHERE 1=1';
-        const params: any[] = [];
-
-        if (companyId && userEmail) {
-            query += ' AND (company_id = ? OR user_email = ?)';
-            params.push(companyId, userEmail);
-        } else if (companyId) {
-            query += ' AND company_id = ?';
-            params.push(companyId);
-        } else if (userEmail) {
-            query += ' AND user_email = ?';
-            params.push(userEmail);
-        }
+        let query = 'SELECT * FROM user_sessions WHERE user_email = ?';
+        const params: any[] = [userEmail];
 
         query += ' ORDER BY login_time DESC LIMIT 100';
 
