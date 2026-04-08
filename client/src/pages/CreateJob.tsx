@@ -64,12 +64,13 @@ export default function CreateJob() {
         type: 'success'
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create job:', error);
+      const serverError = error.response?.data?.error || error.message;
       setStatusModal({
         isOpen: true,
         title: 'Error',
-        message: 'Failed to create job. Please try again.',
+        message: `Failed to create job: ${serverError}`,
         type: 'error'
       });
     } finally {
