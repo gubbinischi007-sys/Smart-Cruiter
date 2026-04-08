@@ -16,6 +16,7 @@ import platformRoutes from './routes/platform.js';
 import referenceRoutes from './routes/references.js';
 import hrTeamRoutes from './routes/hrTeam.js';
 import { otpRoutes } from './routes/otp.js';
+import { registrationRoutes } from './routes/registration.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -46,6 +47,7 @@ apiRouter.use('/platform', platformRoutes);
 apiRouter.use('/references', referenceRoutes);
 apiRouter.use('/hr-team', hrTeamRoutes);
 apiRouter.use('/otp', otpRoutes);
+apiRouter.use('/registration', registrationRoutes);
 
 // Health check
 apiRouter.get('/health', (req, res) => {

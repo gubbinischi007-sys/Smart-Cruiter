@@ -157,7 +157,24 @@ export default function RegisterCompany() {
                 throw rpcError;
             }
 
-            if (rpcData) setTrackingId(rpcData);
+            if (rpcData) {
+                setTrackingId(rpcData);
+                
+                // Send Tracking ID Email
+                try {
+                    await fetch('/api/registration/confirm', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            email: formData.email.trim(), 
+                            trackingId: rpcData, 
+                            companyName: formData.companyName.trim() 
+                        })
+                    });
+                } catch (emailErr) {
+                    console.error('Failed to send tracking email:', emailErr);
+                }
+            }
 
             // Immediately pipe the artificially generated OCR data into the new table rows we created
             if (extractedTaxId) {
