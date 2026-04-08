@@ -53,11 +53,17 @@ router.get('/', async (req, res) => {
     const jobsMap = Object.fromEntries(jobs.map(j => [j.id, j]));
 
     const result = applicants
-      .filter(a => !companyId || (jobsMap[a.job_id] && jobsMap[a.job_id].company_id === companyId))
+      .filter(a => {
+        // If searching by email (Candidate), show everything matching that email
+        if (email) return true;
+        // Otherwise (Recruiter), filter by company
+        return !companyId || (jobsMap[a.job_id] && jobsMap[a.job_id].company_id === companyId);
+      })
       .map(a => ({
         ...a,
         job_title: jobsMap[a.job_id]?.title || 'Unknown Position'
       }));
+
 
     res.json(result);
   } catch (error) {

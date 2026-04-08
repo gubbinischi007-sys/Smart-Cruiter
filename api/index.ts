@@ -92,18 +92,24 @@ api.get('/applicants', async (req: any, res: any) => {
     try {
         const { job_id, stage, status, email } = req.query;
         const companyId = req.headers['x-company-id'];
-        let q = sb.from('applicants').select('*, jobs!inner(company_id, title)').order('applied_at', { ascending: false });
         
-        // CASE-INSENSITIVE EMAIL FILTER
+        // Critical: If filtering by email (Candidate Dashboard), IGNORE companyId header
+        // otherwise a candidate might be blocked by a lingering HR header from the same browser.
+        const isEmailSearch = !!email;
+
+        let q = sb.from('applicants').select('*, jobs!inner(company_id, title)').order('applied_at', { ascending: false });
         if (email) q = q.ilike('email', email);
         if (job_id) q = q.eq('job_id', job_id);
         if (stage) q = q.eq('stage', stage);
         if (status) q = q.eq('status', status);
-        if (companyId) q = q.eq('jobs.company_id', companyId);
+        
+        // Only apply company filter if NOT a candidate email search
+        if (companyId && !isEmailSearch) {
+            q = q.eq('jobs.company_id', companyId);
+        }
         
         const { data, error } = await q;
         if (error) throw new Error(error.message);
-        
         res.json((data || []).map((a: any) => ({ ...a, job_title: a.jobs?.title || 'Unknown Position' })));
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
