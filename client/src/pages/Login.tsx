@@ -518,8 +518,8 @@ export default function Login() {
                 </p>
               </div>
 
-              {/* Tab Toggle */}
-              {!(selectedRole === 'hr' && hrAccessType === 'hr') && (
+              {/* Tab Toggle - Only show for Applicants */}
+              {selectedRole === 'applicant' && (
                 <div style={{
                   display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '10px',
                   padding: '4px', marginBottom: '1.75rem', border: '1px solid rgba(255,255,255,0.06)'
