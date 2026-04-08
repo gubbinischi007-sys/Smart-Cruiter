@@ -39,19 +39,6 @@ async function sendEmail(opts: { to: string; subject: string; html: string }) {
     } catch (e) { console.error('Email error:', e); }
 }
 
-async function sendBulkEmails(recipients: any[], type: string, getOpts: (r: any) => { subject: string, html: string }) {
-    let successful = 0;
-    for (const r of recipients) {
-        if (!r.email) continue;
-        const opts = getOpts(r);
-        try {
-            await sendEmail({ to: r.email, ...opts });
-            successful++;
-        } catch (e) { console.error(e); }
-    }
-    return { successful, count: recipients.length };
-}
-
 // ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
 app.use(cors({ origin: '*' }));
@@ -89,7 +76,6 @@ api.post('/jobs', async (req: any, res: any) => {
         if (!title) return res.status(400).json({ error: 'Job title is required.' });
 
         const { data: comp } = await sb.from('companies').select('status').eq('id', companyId).single();
-        // AUTO-APPROVE FOR DEV TESTING
         if (!comp || comp.status !== 'approved') {
             await sb.from('companies').update({ status: 'approved' }).eq('id', companyId);
         }
@@ -129,16 +115,32 @@ api.post('/applicants', upload.single('resume'), async (req: any, res: any) => {
     try {
         const { job_id, first_name, last_name, email, phone, resume_url, cover_letter } = req.body;
         if (!job_id || !first_name || !last_name || !email) return res.status(400).json({ error: 'Missing required fields' });
-        let pt = '';
-        if (req.file) { try { const p = await pdf(req.file.buffer); pt = p.text || ''; } catch (err) { } }
+        
+        let resumeText = '';
+        if (req.file) { try { const p = await pdf(req.file.buffer); resumeText = p.text || ''; } catch (err) { } }
+        
         const { data: job } = await sb.from('jobs').select('*').eq('id', job_id).single();
         if (!job || job.status !== 'open') return res.status(400).json({ error: 'Job not found or closed.' });
+        
+        const now = new Date().toISOString();
         const id = uuidv4();
-        const { data, error } = await sb.from('applicants').insert({
-            id, job_id, first_name, last_name, email, phone, resume_url, cover_letter, resume_text: pt,
-            stage: 'applied', status: 'active', applied_at: new Date().toISOString(), updated_at: new Date().toISOString()
-        }).select().single();
-        if (error) throw new Error(error.message);
+        
+        const applicantData: any = {
+            id, job_id, first_name, last_name, email, phone: phone || null,
+            resume_url: resume_url || null, cover_letter: cover_letter || null,
+            stage: 'applied', status: 'active', applied_at: now, updated_at: now
+        };
+
+        // Attempt to insert with resume_text, if it fails, insert without it
+        const { data, error } = await sb.from('applicants').insert({ ...applicantData, resume_text: resumeText }).select().single();
+        
+        if (error) {
+            console.warn('Initial insert failed, retrying without resume_text:', error.message);
+            const { data: retryData, error: retryError } = await sb.from('applicants').insert(applicantData).select().single();
+            if (retryError) throw new Error(retryError.message);
+            return res.status(201).json(retryData);
+        }
+
         res.status(201).json(data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -173,12 +175,10 @@ api.get('/analytics/dashboard', async (req: any, res: any) => {
 
 api.get('/interviews', async (req: any, res: any) => res.json([]));
 
-// PLATFORM STATUS
 api.get('/platform/status', async (req: any, res: any) => {
     try {
         const { email } = req.query;
         let { data } = await sb.from('companies').select('*').eq('email', email).maybeSingle();
-        // AUTO-APPROVE IF NONE
         if (data && data.status === 'none') {
             const { data: updated } = await sb.from('companies').update({ status: 'approved' }).eq('id', data.id).select().single();
             data = updated;
@@ -187,7 +187,6 @@ api.get('/platform/status', async (req: any, res: any) => {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// HR TEAM
 api.get('/hr-team', async (req: any, res: any) => {
     try {
         const companyId = req.headers['x-company-id'];

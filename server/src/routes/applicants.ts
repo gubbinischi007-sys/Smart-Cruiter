@@ -165,9 +165,15 @@ router.post('/', upload.single('resume'), async (req, res) => {
     if (req.file) {
       try {
         console.log(`[PDF] Received file: ${req.file.originalname} (${req.file.size} bytes)`);
-        const parsed = await pdfParse(req.file.buffer);
-        actualPdfText = parsed.text || '';
-        console.log(`[PDF] Parsed ${actualPdfText.length} chars of text`);
+        // Safer pdf-parse call
+        const parseFunc = (pdfParseModule as any).default || pdfParseModule;
+        if (typeof parseFunc === 'function') {
+          const parsed = await parseFunc(req.file.buffer);
+          actualPdfText = parsed.text || '';
+          console.log(`[PDF] Parsed ${actualPdfText.length} chars of text`);
+        } else {
+          console.warn('[PDF] pdf-parse is not a function, skipping parsing');
+        }
       } catch (err) {
         console.error("[PDF Parsing error]:", err);
       }
@@ -198,25 +204,52 @@ router.post('/', upload.single('resume'), async (req, res) => {
       return res.status(400).json({ error: 'Job is not open for applications' });
     }
 
-    await run(
-      `INSERT INTO applicants (id, job_id, first_name, last_name, email, phone, resume_url, cover_letter, resume_text, stage, status, applied_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        input.job_id,
-        input.first_name,
-        input.last_name,
-        input.email,
-        input.phone || null,
-        input.resume_url || null,
-        input.cover_letter || null,
-        actualPdfText || null,
-        'applied',
-        'active',
-        now,
-        now,
-      ]
-    );
+    try {
+      await run(
+        `INSERT INTO applicants (id, job_id, first_name, last_name, email, phone, resume_url, cover_letter, resume_text, stage, status, applied_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          input.job_id,
+          input.first_name,
+          input.last_name,
+          input.email,
+          input.phone || null,
+          input.resume_url || null,
+          input.cover_letter || null,
+          actualPdfText || null,
+          'applied',
+          'active',
+          now,
+          now,
+        ]
+      );
+    } catch (dbErr: any) {
+      if (dbErr.message?.includes('resume_text') || dbErr.message?.includes('column')) {
+        console.warn('Fallback: Saving applicant without resume_text column');
+        await run(
+          `INSERT INTO applicants (id, job_id, first_name, last_name, email, phone, resume_url, cover_letter, stage, status, applied_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            input.job_id,
+            input.first_name,
+            input.last_name,
+            input.email,
+            input.phone || null,
+            input.resume_url || null,
+            input.cover_letter || null,
+            'applied',
+            'active',
+            now,
+            now,
+          ]
+        );
+      } else {
+        throw dbErr;
+      }
+    }
+
 
     const applicant = await get<Applicant>('SELECT * FROM applicants WHERE id = ?', [id]);
 
@@ -313,17 +346,12 @@ router.post('/', upload.single('resume'), async (req, res) => {
             </div>
         `;
 
-      // Send email in background, await it so we know it executes correctly
-      try {
-        await sendEmail({
-          to: input.email,
-          subject: `Update regarding your application for ${job.title}`,
-          html: emailHtml
-        });
-        console.log(`Auto - reject email sent to ${input.email} `);
-      } catch (err) {
-        console.error('Failed to send auto-reject email:', err);
-      }
+      // Send email in background
+      sendEmail({
+        to: input.email,
+        subject: `Update regarding your application for ${job.title}`,
+        html: emailHtml
+      }).catch(err => console.error('Failed to send auto-reject email:', err));
     } else if (score >= 90) {
       // Automatically shortlist in database
       await run('UPDATE applicants SET stage = ? WHERE id = ?', ['shortlisted', id]);
@@ -334,11 +362,12 @@ router.post('/', upload.single('resume'), async (req, res) => {
     // -------------------------------------------------------------
 
     res.status(201).json(applicant);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating applicant:', error);
-    res.status(500).json({ error: 'Failed to create applicant' });
+    res.status(500).json({ error: error.message || 'Failed to create applicant' });
   }
 });
+
 
 // Update applicant
 router.put('/:id', async (req, res) => {
