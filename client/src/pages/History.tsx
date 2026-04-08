@@ -36,6 +36,9 @@ export default function History() {
 
     const loadData = async () => {
         try {
+            // Add a cache-busting timestamp to the fetching logic
+            const timestamp = Date.now();
+            
             // 1. Fetch Terminal Histories
             const appRes = await historyApi.getAll();
             setAppHistory(appRes.data || []);
