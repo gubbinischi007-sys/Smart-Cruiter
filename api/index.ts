@@ -184,9 +184,160 @@ api.get('/platform/status', async (req: any, res: any) => {
 api.get('/hr-team', async (req: any, res: any) => {
     try {
         const companyId = req.headers['x-company-id'];
-        const { data: hr } = await sb.from('hr_team').select('*').eq('company_id', companyId);
-        const { data: inv } = await sb.from('hr_invitations').select('*').eq('company_id', companyId).eq('status', 'pending');
-        res.json([...(hr || []), ...(inv || []).map(i => ({ id: i.id, name: 'Invited Member', email: i.email, status: 'Pending' }))]);
+        if (!companyId) return res.status(400).json({ error: 'Company ID is required.' });
+
+        // 1. Get profiles
+        const { data: profiles, error: profileErr } = await sb
+            .from('user_profiles')
+            .select('id, name, email, role_title, created_at')
+            .eq('company_id', companyId)
+            .eq('role', 'hr');
+        if (profileErr) throw profileErr;
+
+        // 2. Fetch all auth users to cross-reference ban status
+        const { data: authData } = await sb.auth.admin.listUsers();
+        const authMap = new Map((authData?.users || []).map((u: any) => [u.id, u]));
+
+        // 3. Merge status
+        const enriched = (profiles || []).map((p: any) => {
+            const authUser = authMap.get(p.id) as any;
+            const bannedUntil = authUser?.banned_until;
+            const isSuspended = bannedUntil && new Date(bannedUntil) > new Date();
+            return { ...p, status: isSuspended ? 'suspended' : 'active' };
+        });
+
+        // 4. Fetch pending invitations
+        const { data: invites } = await sb
+            .from('hr_invitations')
+            .select('id, email, role_title, created_at')
+            .eq('company_id', companyId)
+            .eq('status', 'pending');
+
+        const pendingMembers = (invites || []).map((inv: any) => ({
+            ...inv,
+            name: 'Pending...',
+            status: 'pending',
+        }));
+
+        res.json([...enriched, ...pendingMembers]);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// HR INVITES
+api.post('/hr-invites/send', async (req: any, res: any) => {
+    try {
+        const companyId = req.headers['x-company-id'];
+        const { email, role_title } = req.body;
+        if (!companyId || !email) return res.status(400).json({ error: 'Email and Company ID are required.' });
+
+        const { data: existingUser } = await sb.from('user_profiles').select('id').eq('email', email.trim().toLowerCase()).maybeSingle();
+        if (existingUser) return res.status(409).json({ error: 'A user with this email already exists.' });
+
+        const token = uuidv4();
+        const { error: inviteErr } = await sb.from('hr_invitations').insert({
+            id: uuidv4(),
+            company_id: companyId,
+            email: email.trim().toLowerCase(),
+            role_title: role_title?.trim() || '',
+            token,
+            status: 'pending',
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        });
+        if (inviteErr) throw inviteErr;
+
+        const { data: company } = await sb.from('companies').select('name').eq('id', companyId).single();
+        const inviteLink = `${process.env.FRONTEND_URL || 'https://smart-cruiter-2sdv.vercel.app'}/accept-invite?token=${token}`;
+
+        await sendEmail({
+            to: email,
+            subject: `Invitation to join ${company?.name || 'SmartRecruiter'}`,
+            html: `<h1>You're Invited!</h1><p>You have been invited to join the recruitment team at <strong>${company?.name || 'your organization'}</strong>.</p><a href="${inviteLink}">Accept Invitation & Setup Account</a>`
+        });
+
+        res.json({ message: 'Invitation sent successfully!' });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+api.get('/hr-invites/verify/:token', async (req: any, res: any) => {
+    try {
+        const { token } = req.params;
+        const { data: invite, error } = await sb.from('hr_invitations').select('*, companies(name)').eq('token', token).eq('status', 'pending').single();
+        if (error || !invite) return res.status(404).json({ error: 'Invalid or expired invitation token.' });
+        if (new Date(invite.expires_at) < new Date()) return res.status(410).json({ error: 'This invitation has expired.' });
+        res.json(invite);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+api.post('/hr-invites/accept', async (req: any, res: any) => {
+    try {
+        const { token, name, password } = req.body;
+        const { data: invite, error: fetchErr } = await sb.from('hr_invitations').select('*').eq('token', token).eq('status', 'pending').single();
+        if (fetchErr || !invite) return res.status(400).json({ error: 'Invite not found.' });
+
+        const { data: authData, error: authErr } = await sb.auth.admin.createUser({
+            email: invite.email,
+            password,
+            email_confirm: true,
+            user_metadata: { name, role: 'hr' }
+        });
+        if (authErr) throw authErr;
+
+        const { error: profileErr } = await sb.from('user_profiles').insert({
+            id: authData.user.id,
+            email: invite.email,
+            name,
+            role: 'hr',
+            role_title: invite.role_title,
+            company_id: invite.company_id
+        });
+        if (profileErr) throw profileErr;
+
+        await sb.from('hr_invitations').update({ status: 'accepted' }).eq('id', invite.id);
+        res.json({ message: 'Account created successfully!' });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// HR TEAM MANAGEMENT
+api.patch('/hr-team/:id/suspend', async (req: any, res: any) => {
+    try {
+        const { id } = req.params;
+        const companyId = req.headers['x-company-id'];
+        const { data: profile } = await sb.from('user_profiles').select('id, name').eq('id', id).eq('company_id', companyId).single();
+        if (!profile) return res.status(404).json({ error: 'HR member not found.' });
+        const { error: banError } = await sb.auth.admin.updateUserById(id, { ban_duration: '87600h' });
+        if (banError) throw banError;
+        res.json({ message: `${profile.name} has been suspended.` });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+api.patch('/hr-team/:id/reactivate', async (req: any, res: any) => {
+    try {
+        const { id } = req.params;
+        const companyId = req.headers['x-company-id'];
+        const { data: profile } = await sb.from('user_profiles').select('id, name').eq('id', id).eq('company_id', companyId).single();
+        if (!profile) return res.status(404).json({ error: 'HR member not found.' });
+        const { error: unbanError } = await sb.auth.admin.updateUserById(id, { ban_duration: 'none' });
+        if (unbanError) throw unbanError;
+        res.json({ message: `${profile.name} has been reactivated.` });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+api.delete('/hr-team/:id', async (req: any, res: any) => {
+    try {
+        const { id } = req.params;
+        const companyId = req.headers['x-company-id'];
+        const { data: profile } = await sb.from('user_profiles').select('id, name').eq('id', id).eq('company_id', companyId).maybeSingle();
+        if (profile) {
+            await sb.auth.admin.deleteUser(id);
+            await sb.from('user_profiles').delete().eq('id', id);
+            return res.json({ message: `${profile.name} has been deleted.` });
+        }
+        const { data: invite } = await sb.from('hr_invitations').select('id, email').eq('id', id).eq('company_id', companyId).maybeSingle();
+        if (invite) {
+            await sb.from('hr_invitations').delete().eq('id', id);
+            return res.json({ message: `Invitation for ${invite.email} cancelled.` });
+        }
+        res.status(404).json({ error: 'Member not found.' });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
