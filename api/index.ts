@@ -230,9 +230,6 @@ api.post('/hr-invites/send', async (req: any, res: any) => {
         const { email, role_title } = req.body;
         if (!companyId || !email) return res.status(400).json({ error: 'Email and Company ID are required.' });
 
-        const { data: existingUser } = await sb.from('user_profiles').select('id').eq('email', email.trim().toLowerCase()).maybeSingle();
-        if (existingUser) return res.status(409).json({ error: 'A user with this email already exists.' });
-
         const token = uuidv4();
         const { error: inviteErr } = await sb.from('hr_invitations').insert({
             id: uuidv4(),
@@ -261,29 +258,44 @@ api.post('/hr-invites/send', async (req: any, res: any) => {
 api.get('/hr-invites/verify/:token', async (req: any, res: any) => {
     try {
         const { token } = req.params;
-        const { data: invite, error } = await sb.from('hr_invitations').select('*, companies(name)').eq('token', token).eq('status', 'pending').single();
-        if (error || !invite) return res.status(404).json({ error: 'Invalid or expired invitation token.' });
+        const { data: invite, error } = await sb.from('hr_invitations').select('*, companies(name)').eq('token', token).single();
+        if (error || !invite) return res.status(404).json({ error: `Invite not found for token: ${token}` });
         if (new Date(invite.expires_at) < new Date()) return res.status(410).json({ error: 'This invitation has expired.' });
-        res.json(invite);
+        res.json({ ...invite, accepted: invite.status === 'accepted' });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 api.post('/hr-invites/accept', async (req: any, res: any) => {
     try {
         const { token, name, password } = req.body;
-        const { data: invite, error: fetchErr } = await sb.from('hr_invitations').select('*').eq('token', token).eq('status', 'pending').single();
-        if (fetchErr || !invite) return res.status(400).json({ error: 'Invite not found.' });
+        const { data: invite, error: fetchErr } = await sb.from('hr_invitations').select('*').eq('token', token).single();
+        if (fetchErr || !invite) return res.status(400).json({ error: `Invite not found for token in body: ${token}` });
+        if (invite.status === 'accepted') return res.json({ message: 'Account already created!' });
 
+        let userId;
         const { data: authData, error: authErr } = await sb.auth.admin.createUser({
             email: invite.email,
             password,
             email_confirm: true,
             user_metadata: { name, role: 'hr' }
         });
-        if (authErr) throw authErr;
+        
+        if (authErr) {
+            if (authErr.message.includes('already registered') || authErr.message.includes('already exists')) {
+                // User exists in Auth, let's find their ID
+                const { data: userData } = await sb.auth.admin.listUsers();
+                const existing = userData?.users.find(u => u.email?.toLowerCase() === invite.email.toLowerCase());
+                if (!existing) throw new Error('User supposedly exists but not found in Auth list.');
+                userId = existing.id;
+            } else {
+                throw authErr;
+            }
+        } else {
+            userId = authData.user.id;
+        }
 
         const { error: profileErr } = await sb.from('user_profiles').upsert({
-            id: authData.user.id,
+            id: userId,
             email: invite.email,
             name,
             role: 'hr',
@@ -326,18 +338,31 @@ api.delete('/hr-team/:id', async (req: any, res: any) => {
     try {
         const { id } = req.params;
         const companyId = req.headers['x-company-id'];
-        const { data: profile } = await sb.from('user_profiles').select('id, name').eq('id', id).eq('company_id', companyId).maybeSingle();
+        
+        // 1. Try to find a user profile
+        const { data: profile } = await sb.from('user_profiles').select('id, name, email').eq('id', id).eq('company_id', companyId).maybeSingle();
         if (profile) {
             await sb.auth.admin.deleteUser(id);
             await sb.from('user_profiles').delete().eq('id', id);
-            return res.json({ message: `${profile.name} has been deleted.` });
+            return res.json({ message: `${profile.name} has been permanently deleted.` });
         }
+        
+        // 2. Try to find a pending invitation
         const { data: invite } = await sb.from('hr_invitations').select('id, email').eq('id', id).eq('company_id', companyId).maybeSingle();
         if (invite) {
+            // Also clean up any partially created auth/profile data for this email
+            const { data: authData } = await sb.auth.admin.listUsers();
+            const existing = authData?.users.find(u => u.email?.toLowerCase() === invite.email.toLowerCase());
+            if (existing) {
+                await sb.auth.admin.deleteUser(existing.id);
+                await sb.from('user_profiles').delete().eq('id', existing.id);
+            }
+            
             await sb.from('hr_invitations').delete().eq('id', id);
-            return res.json({ message: `Invitation for ${invite.email} cancelled.` });
+            return res.json({ message: `Invitation for ${invite.email} has been cancelled and associated data removed.` });
         }
-        res.status(404).json({ error: 'Member not found.' });
+        
+        res.status(404).json({ error: 'Member or Invitation not found.' });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
