@@ -238,30 +238,35 @@ export default function Dashboard() {
       </div>
 
       {/* Verification Status Banner */}
-      {user.role === 'hr' && companyStatus && companyStatus.status?.toLowerCase() !== 'approved' && (
+      {user.role === 'hr' && companyStatus && companyStatus.status !== 'approved' && (
         <div className={`verification-banner ${companyStatus.status}`} style={{
           marginBottom: '2rem',
           padding: '1.25rem',
           borderRadius: '12px',
-          background: (companyStatus.status?.toLowerCase() === 'pending' || companyStatus.status?.toLowerCase() === 'reviewing') ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-          border: `1px solid ${(companyStatus.status?.toLowerCase() === 'pending' || companyStatus.status?.toLowerCase() === 'reviewing') ? '#f59e0b' : '#ef4444'}`,
+          background: companyStatus.status === 'pending' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+          border: `1px solid ${companyStatus.status === 'pending' ? '#f59e0b' : '#ef4444'}`,
           display: 'flex',
           alignItems: 'center',
           gap: '1rem'
         }}>
-          <div style={{ color: (companyStatus.status?.toLowerCase() === 'pending' || companyStatus.status?.toLowerCase() === 'reviewing') ? '#f59e0b' : '#ef4444' }}>
-            {(companyStatus.status?.toLowerCase() === 'pending' || companyStatus.status?.toLowerCase() === 'reviewing') ? <AlertTriangle size={24} /> : <X size={24} />}
+          <div style={{ color: companyStatus.status === 'pending' ? '#f59e0b' : '#ef4444' }}>
+            {companyStatus.status === 'pending' ? <AlertTriangle size={24} /> : <X size={24} />}
           </div>
           <div style={{ flex: 1 }}>
             <h4 style={{ fontWeight: 700, margin: 0, color: 'white' }}>
-              Company Verification: {companyStatus.status?.toUpperCase() || 'UNKNOWN'}
+              Company Verification: {companyStatus.status.toUpperCase()}
             </h4>
             <p style={{ margin: '0.25rem 0 0', fontSize: '0.9rem', color: '#94a3b8' }}>
-              {(companyStatus.status?.toLowerCase() === 'pending' || companyStatus.status?.toLowerCase() === 'reviewing')
+              {companyStatus.status === 'pending'
                 ? 'Your company document is being reviewed by our platform administrators. Some features may be restricted until verified.'
-                : 'Current status is not "Approved". Please contact support if this is unexpected or re-upload your registration documents.'}
+                : 'Your verification was rejected. Please contact support or re-upload your registration documents.'}
             </p>
           </div>
+          {companyStatus.status === 'approved' && (
+            <div style={{ color: '#10b981' }}>
+              <ShieldCheck size={24} />
+            </div>
+          )}
         </div>
       )}
 

@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { all, run } from '../database.js';
+import { all, run, get } from '../database.js';
 import { v4 as uuidv4 } from 'uuid';
-import { supabase } from '../lib/supabase.js';
 
 const router = Router();
 
@@ -94,11 +93,14 @@ router.delete('/:id', async (req, res) => {
 
 router.get('/activity', async (req, res) => {
     try {
-        const userEmail = (req.headers['x-user-email'] as string || '').toLowerCase();
-        
-        // Use a simple email-only query which is 100% compatible with the Vercel shim
-        let query = 'SELECT * FROM hr_activity_logs WHERE user_email = ?';
-        const params: any[] = [userEmail];
+        const companyId = req.headers['x-company-id'];
+        let query = 'SELECT * FROM hr_activity_logs WHERE 1=1';
+        const params: any[] = [];
+
+        if (companyId) {
+            query += ' AND company_id = ?';
+            params.push(companyId);
+        }
 
         query += ' ORDER BY created_at DESC LIMIT 500';
 
@@ -112,10 +114,14 @@ router.get('/activity', async (req, res) => {
 
 router.get('/sessions', async (req, res) => {
     try {
-        const userEmail = (req.headers['x-user-email'] as string || '').toLowerCase();
-        
-        let query = 'SELECT * FROM user_sessions WHERE user_email = ?';
-        const params: any[] = [userEmail];
+        const companyId = req.headers['x-company-id'];
+        let query = 'SELECT * FROM user_sessions WHERE 1=1';
+        const params: any[] = [];
+
+        if (companyId) {
+            query += ' AND company_id = ?';
+            params.push(companyId);
+        }
 
         query += ' ORDER BY login_time DESC LIMIT 100';
 
@@ -127,21 +133,26 @@ router.get('/sessions', async (req, res) => {
 });
 
 router.post('/sessions/start', async (req, res) => {
-    const rawEmail = req.body.email;
-    const email = (rawEmail || '').toLowerCase();
-    let companyId = req.headers['x-company-id'];
-    
+    const { email } = req.body;
+    const companyId = req.headers['x-company-id'];
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
     try {
-        if (!companyId) {
-            const { data: profile } = await supabase
-                .from('user_profiles')
-                .select('company_id')
-                .ilike('email', email)
-                .single();
-            if (profile?.company_id) companyId = profile.company_id;
+        // Prevent duplicates: Check for an existing active session for this user/company
+        const existingSession = await get(
+            'SELECT id FROM user_sessions WHERE user_email = ? AND (company_id = ? OR (company_id IS NULL AND ? IS NULL)) AND logout_time IS NULL ORDER BY login_time DESC LIMIT 1',
+            [email, companyId || null, companyId || null]
+        );
+
+        if (existingSession) {
+            return res.json({ sessionId: existingSession.id });
         }
+
+        // Close any other "dangling" active sessions for this user before starting a new one
+        await run(
+            'UPDATE user_sessions SET logout_time = ? WHERE user_email = ? AND logout_time IS NULL',
+            [new Date().toISOString(), email]
+        );
 
         const id = uuidv4();
         await run(
@@ -150,7 +161,6 @@ router.post('/sessions/start', async (req, res) => {
         );
         res.json({ sessionId: id });
     } catch (error) {
-        console.error('Session start error:', error);
         res.status(500).json({ error: 'Failed to start session' });
     }
 });

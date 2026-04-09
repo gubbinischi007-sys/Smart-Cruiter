@@ -54,13 +54,6 @@ function syncLocalStorage(profile: AppUser) {
   }));
   setUserRole(profile.role);
   setUserEmail(profile.email);
-
-  // Start server session if HR
-  if (profile.role === 'hr' && !localStorage.getItem('serverSessionId')) {
-    historyApi.startSession(profile.email).then(res => {
-      localStorage.setItem('serverSessionId', res.data.sessionId);
-    }).catch(console.error);
-  }
 }
 function clearLocalStorage() {
   localStorage.removeItem('user');

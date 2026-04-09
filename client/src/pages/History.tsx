@@ -9,6 +9,8 @@ interface Action {
     timestamp: string;
 }
 
+// ... (interfaces)
+
 interface LoginRecord {
     id: string;
     email: string;
@@ -36,9 +38,6 @@ export default function History() {
 
     const loadData = async () => {
         try {
-            // Add a cache-busting timestamp to the fetching logic
-            const timestamp = Date.now();
-            
             // 1. Fetch Terminal Histories
             const appRes = await historyApi.getAll();
             setAppHistory(appRes.data || []);
@@ -50,14 +49,7 @@ export default function History() {
             ]);
             
             if (profilesRes.count !== null) setSystemUsersCount(profilesRes.count);
-
             const allSessions = sessionsRes.data || [];
-            const activeUserEmails = new Set(
-                allSessions
-                    .filter((sess: any) => !sess.logout_time)
-                    .map((sess: any) => sess.user_email)
-            );
-            setActiveUsersCount(activeUserEmails.size);
 
             // 3. Fetch Raw Data for Sessions & Actions
             const [activityRes, profileRes] = await Promise.all([
@@ -70,12 +62,25 @@ export default function History() {
             const profiles = profileRes.data || [];
             const profileMap = new Map(profiles.map((p: any) => [p.email, p]));
 
+            // Calculate Active HR Users (Excluding Company Owner)
+            const activeSessions = sessions.filter((sess: any) => !sess.logout_time);
+            const activeHrEmails = activeSessions
+                .filter((sess: any) => {
+                    const profile = profileMap.get(sess.user_email);
+                    return profile?.role_title !== 'Company Owner';
+                })
+                .map((sess: any) => sess.user_email);
+            
+            setActiveUsersCount(new Set(activeHrEmails).size);
+
             // 4. Enrich Sessions with Actions
+            // Sort logs by time ascending so we can push them into correctly timed sessions
             const sortedLogs = [...logs].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
             const enrichedSessions: LoginRecord[] = sessions.map((sess: any) => {
                 const profile = profileMap.get(sess.user_email);
                 
+                // Find actions that happened DURING this session
                 const sessionActions = sortedLogs.filter(log => {
                     const logTime = new Date(log.created_at).getTime();
                     const loginTime = new Date(sess.login_time).getTime();
@@ -106,6 +111,7 @@ export default function History() {
     useEffect(() => {
         loadData();
 
+        // REAL-TIME SUBSCRIPTIONS
         const channel = supabase
             .channel('history-realtime-v3')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'application_history' }, loadData)
@@ -134,6 +140,17 @@ export default function History() {
         });
     };
 
+    const handleDeleteRecord = async (id: string) => {
+        if (!window.confirm('Are you sure you want to delete this record?')) return;
+        try {
+            await historyApi.delete(id);
+            setAppHistory(prev => prev.filter(record => record.id !== id));
+        } catch (error) {
+            console.error('Failed to delete history record:', error);
+            alert('Failed to delete record');
+        }
+    };
+
     return (
         <div className="history-container">
             <div className="history-header">
@@ -143,6 +160,7 @@ export default function History() {
                 </p>
             </div>
 
+            {/* Stats Row */}
             <div className="history-stats">
                 <div className="stat-card">
                     <div className="stat-icon bg-green">
@@ -173,6 +191,7 @@ export default function History() {
                 </div>
             </div>
 
+            {/* Application History Section */}
             <div className="history-section mb-8">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-white flex items-center gap-2 m-0">
@@ -247,11 +266,13 @@ export default function History() {
                 </div>
             </div>
 
+            {/* Login History Section */}
             <div className="history-section">
                 <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                     <Clock size={20} className="text-primary" /> Login Activity
                 </h2>
                 <div className="history-list">
+                    {/* ... existing login history table ... */}
                     {history.length === 0 ? (
                         <div className="empty-state">
                             <Clock size={48} />
@@ -265,7 +286,6 @@ export default function History() {
                                     <th>User</th>
                                     <th>Role</th>
                                     <th>Session Info</th>
-                                    <th>Duration</th>
                                     <th>Actions Performed</th>
                                 </tr>
                             </thead>
@@ -302,22 +322,8 @@ export default function History() {
                                                     <span className="status-active">Active Now</span>
                                                 )}
                                             </div>
-                                        </td>
-                                        <td style={{ verticalAlign: 'top', paddingTop: '1.5rem' }}>
-                                            <div style={{ 
-                                                display: 'inline-flex', 
-                                                alignItems: 'center', 
-                                                gap: '0.5rem', 
-                                                padding: '0.4rem 0.75rem', 
-                                                borderRadius: '20px', 
-                                                background: record.logoutTime ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                                                border: `1px solid ${record.logoutTime ? 'rgba(99, 102, 241, 0.2)' : 'rgba(16, 185, 129, 0.3)'}`,
-                                                color: record.logoutTime ? '#a5b4fc' : '#34d399',
-                                                fontSize: '0.8rem',
-                                                fontWeight: 600
-                                            }}>
-                                                <Clock size={12} />
-                                                {(() => {
+                                            <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.5rem', paddingLeft: '22px' }}>
+                                                Duration {record.logoutTime ? '' : '(so far)'}: {(() => {
                                                     const end = record.logoutTime ? new Date(record.logoutTime).getTime() : Date.now();
                                                     const diff = end - new Date(record.loginTime).getTime();
                                                     const minutes = Math.floor(diff / 60000);
@@ -326,10 +332,9 @@ export default function History() {
                                                     const hours = Math.floor(minutes / 60);
                                                     return `${hours}h ${minutes % 60}m`;
                                                 })()}
-                                                {!record.logoutTime && <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>(active)</span>}
                                             </div>
                                         </td>
-                                        <td style={{ verticalAlign: 'top', paddingTop: '1.5rem' }}>
+                                        <td>
                                             {record.actions && record.actions.length > 0 ? (
                                                 <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                                                     {record.actions.map((action, idx) => (

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
-import { setCompanyId } from '../services/api';
+import { setCompanyId, historyApi } from '../services/api';
 
 interface Company {
     id: string;
@@ -60,13 +60,17 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
                     .eq('id', profile.company_id)
                     .single();
 
-                setCompany(comp || null);
+                const c = comp || null;
+                setCompany(c);
+                setCompanyId(c?.id || null);
             } else {
                 setCompany(null);
+                setCompanyId(null);
             }
         } catch (err) {
             console.warn('Could not load company:', err);
             setCompany(null);
+            setCompanyId(null);
         } finally {
             setLoading(false);
         }
@@ -74,8 +78,16 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (user.isAuthenticated) {
-            setLoading(true); // Must be sync so CompanyGuard doesn't see loading=false prematurely
-            fetchCompany();
+            setLoading(true);
+            fetchCompany().then(() => {
+                // Once company is loaded (or not), start the history session if it's an admin role
+                const isAdmin = user.role === 'hr' || user.role === 'super_admin';
+                if (isAdmin && !localStorage.getItem('serverSessionId')) {
+                    historyApi.startSession(user.email!).then(res => {
+                        localStorage.setItem('serverSessionId', res.data.sessionId);
+                    }).catch(err => console.error('Failed to start tracking session:', err));
+                }
+            });
         } else {
             setCompany(null);
             setLoading(false);

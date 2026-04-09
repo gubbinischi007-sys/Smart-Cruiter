@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email       TEXT NOT NULL,
   name        TEXT NOT NULL DEFAULT '',
-  role        TEXT NOT NULL DEFAULT 'applicant' CHECK (role IN ('hr', 'applicant')),
+  role        TEXT NOT NULL DEFAULT 'applicant' CHECK (role IN ('hr', 'applicant', 'super_admin')),
   role_title  TEXT,
   company_id  UUID,
   created_at  TIMESTAMPTZ DEFAULT NOW()

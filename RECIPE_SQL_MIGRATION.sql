@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS application_history (
   date TIMESTAMPTZ DEFAULT now(),
   created_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_app_history_company ON application_history(company_id);
 
 -- 7. NOTIFICATIONS
 CREATE TABLE IF NOT EXISTS notifications (
@@ -124,39 +125,29 @@ CREATE TABLE IF NOT EXISTS companies (
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS about_us TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS brand_color TEXT;
 
--- 9. LOGIN SESSIONS & ACTIVITY LOGS
+-- 9. PERFORMANCE INDEXES
+CREATE INDEX IF NOT EXISTS idx_applicants_job_id ON applicants(job_id);
+CREATE INDEX IF NOT EXISTS idx_applicants_email ON applicants(email);
+CREATE INDEX IF NOT EXISTS idx_interviews_applicant ON interviews(applicant_id);
+CREATE INDEX IF NOT EXISTS idx_references_token ON candidate_references(token);
+
+-- 10. HISTORY AND LOGS
 CREATE TABLE IF NOT EXISTS user_sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_email TEXT NOT NULL,
   company_id UUID,
   login_time TIMESTAMPTZ DEFAULT now(),
-  logout_time TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now()
+  logout_time TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS hr_activity_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_email TEXT NOT NULL,
+  company_id UUID,
   action TEXT NOT NULL,
-  company_id UUID,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS user_profiles (
-  id UUID PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  name TEXT,
-  role TEXT,
-  role_title TEXT,
-  company_id UUID,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- 10. PERFORMANCE INDEXES
-CREATE INDEX IF NOT EXISTS idx_applicants_job_id ON applicants(job_id);
-CREATE INDEX IF NOT EXISTS idx_applicants_email ON applicants(email);
-CREATE INDEX IF NOT EXISTS idx_interviews_applicant ON interviews(applicant_id);
-CREATE INDEX IF NOT EXISTS idx_references_token ON candidate_references(token);
 CREATE INDEX IF NOT EXISTS idx_sessions_email ON user_sessions(user_email);
 CREATE INDEX IF NOT EXISTS idx_activity_email ON hr_activity_logs(user_email);
 
