@@ -282,7 +282,7 @@ api.post('/hr-invites/accept', async (req: any, res: any) => {
         });
         if (authErr) throw authErr;
 
-        const { error: profileErr } = await sb.from('user_profiles').insert({
+        const { error: profileErr } = await sb.from('user_profiles').upsert({
             id: authData.user.id,
             email: invite.email,
             name,
