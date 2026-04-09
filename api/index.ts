@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import nodemailer from 'nodemailer';
 import multer from 'multer';
-// pdf-parse loaded dynamically to avoid serverless crash on import
+import pdf from 'pdf-parse';
 
 dotenv.config();
 
@@ -23,9 +23,6 @@ const transporter = nodemailer.createTransport({
 });
 
 async function sendEmail(opts: { to: string; subject: string; html: string }) {
-    console.log(`Attempting to send email to ${opts.to}...`);
-
-    // Log to DB separately — never block email send if this fails
     try {
         await sb.from('notifications').insert({
             id: uuidv4(),
@@ -33,25 +30,13 @@ async function sendEmail(opts: { to: string; subject: string; html: string }) {
             subject: opts.subject,
             message: opts.html,
             type: 'email',
+            is_read: 0,
             created_at: new Date().toISOString()
         });
-        console.log('Notification log saved to Supabase.');
-    } catch (dbErr: any) {
-        console.warn('DB log failed (non-fatal):', dbErr.message);
-    }
-
-    // Always attempt SMTP send independently
-    try {
         if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
             await transporter.sendMail({ from: process.env.EMAIL_USER, ...opts });
-            console.log(`Email successfully sent to ${opts.to} via Gmail.`);
-        } else {
-            console.warn('EMAIL_USER or EMAIL_PASS missing on Vercel. Email not sent.');
         }
-    } catch (mailErr: any) {
-        console.error('SMTP send error:', mailErr.message);
-        throw mailErr; // Re-throw so the API route can return a proper error
-    }
+    } catch (e) { console.error('Email error:', e); }
 }
 
 // ── Express ───────────────────────────────────────────────────────────────────
@@ -134,7 +119,7 @@ api.post('/applicants', upload.single('resume'), async (req: any, res: any) => {
         const { job_id, first_name, last_name, email, phone, resume_url, cover_letter } = req.body;
         if (!job_id || !first_name || !last_name || !email) return res.status(400).json({ error: 'Missing required fields' });
         let resumeText = '';
-        if (req.file) { try { const pdfParse = require('pdf-parse'); const p = await pdfParse(req.file.buffer); resumeText = p.text || ''; } catch (err) { } }
+        if (req.file) { try { const p = await pdf(req.file.buffer); resumeText = p.text || ''; } catch (err) { } }
         const { data: job } = await sb.from('jobs').select('*').eq('id', job_id).single();
         if (!job || job.status !== 'open') return res.status(400).json({ error: 'Job not found or closed.' });
         const now = new Date().toISOString();
@@ -205,175 +190,6 @@ api.get('/hr-team', async (req: any, res: any) => {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// HR TEAM MANAGEMENT
-api.patch('/hr-team/:id/suspend', async (req: any, res: any) => {
-    try {
-        const { error } = await sb.from('hr_team').update({ status: 'suspended' }).eq('id', req.params.id);
-        if (error) throw error;
-        res.json({ message: 'Member suspended' });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.patch('/hr-team/:id/reactivate', async (req: any, res: any) => {
-    try {
-        const { error } = await sb.from('hr_team').update({ status: 'active' }).eq('id', req.params.id);
-        if (error) throw error;
-        res.json({ message: 'Member reactivated' });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.delete('/hr-team/:id', async (req: any, res: any) => {
-    try {
-        const { error } = await sb.from('hr_team').delete().eq('id', req.params.id);
-        if (error) throw error;
-        res.json({ message: 'Member deleted' });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-// HR INVITES
-api.post('/hr-invites/send', async (req: any, res: any) => {
-    try {
-        const companyId = req.headers['x-company-id'];
-        const { email, role_title } = req.body;
-        if (!companyId || !email) return res.status(400).json({ error: 'Email and Company ID are required.' });
-
-        // 1. Check if user already exists
-        const { data: existingUser } = await sb.from('user_profiles').select('id').eq('email', email.trim().toLowerCase()).maybeSingle();
-        if (existingUser) return res.status(409).json({ error: 'A user with this email already exists.' });
-
-        const token = uuidv4();
-        const { error: inviteErr } = await sb.from('hr_invitations').insert({
-            id: uuidv4(),
-            company_id: companyId,
-            email: email.trim().toLowerCase(),
-            role_title: role_title || '',
-            token,
-            status: 'pending',
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-        });
-        if (inviteErr) throw inviteErr;
-
-        const { data: company } = await sb.from('companies').select('name').eq('id', companyId).single();
-        const frontendUrl = process.env.FRONTEND_URL || 'https://smart-cruiterr.vercel.app';
-        const inviteLink = `${frontendUrl}/accept-invite?token=${token}`;
-
-        await sendEmail({
-            to: email,
-            subject: `Invitation to join ${company?.name || 'SmartRecruiter'}`,
-            html: `
-                <div style="font-family: sans-serif; padding: 20px; color: #333; max-width: 600px; border: 1px solid #e2e8f0; border-radius: 12px;">
-                    <h2 style="color: #6366f1;">You're Invited!</h2>
-                    <p>Hello,</p>
-                    <p>You have been invited to join the recruitment team at <strong>${company?.name || 'your organization'}</strong> on SmartRecruiter.</p>
-                    <div style="margin: 30px 0;">
-                        <a href="${inviteLink}" style="background: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
-                            Accept Invitation & Setup Account
-                        </a>
-                    </div>
-                    <p style="font-size: 14px; color: #64748b;">This link will expire in 7 days.</p>
-                </div>
-            `
-        });
-        res.json({ message: 'Invitation sent successfully!' });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.get('/hr-invites/verify/:token', async (req: any, res: any) => {
-    try {
-        const { data: invite, error } = await sb.from('hr_invitations').select('*, companies(name)').eq('token', req.params.token).eq('status', 'pending').single();
-        if (error || !invite) return res.status(404).json({ error: 'Invalid or expired token.' });
-        if (new Date(invite.expires_at) < new Date()) return res.status(410).json({ error: 'Invitation expired.' });
-        res.json(invite);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.post('/hr-invites/accept', async (req: any, res: any) => {
-    try {
-        const { token, name, password } = req.body;
-        const { data: invite, error: fetchErr } = await sb.from('hr_invitations').select('*').eq('token', token).eq('status', 'pending').single();
-        if (fetchErr || !invite) return res.status(400).json({ error: 'Invite not found.' });
-
-        const { data: authData, error: authErr } = await sb.auth.admin.createUser({
-            email: invite.email, password, email_confirm: true, user_metadata: { name, role: 'hr' }
-        });
-        if (authErr) throw authErr;
-
-        await sb.from('user_profiles').insert({
-            id: authData.user.id, email: invite.email, name, role: 'hr', role_title: invite.role_title, company_id: invite.company_id
-        });
-        await sb.from('hr_team').insert({
-            id: authData.user.id, company_id: invite.company_id, name, email: invite.email, role_title: invite.role_title, status: 'active'
-        });
-        await sb.from('hr_invitations').update({ status: 'accepted' }).eq('id', invite.id);
-
-        res.json({ message: 'Account created successfully!' });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-// OTP
-api.post('/otp/send', async (req: any, res: any) => {
-    try {
-        const { email, otp } = req.body;
-        if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
-        await sendEmail({
-            to: email,
-            subject: 'Verification Code',
-            html: `<h1>Verification Code</h1><p>Your code is: <strong>${otp}</strong></p>`
-        });
-        res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-// BULK EMAILS
-api.post('/emails/bulk-acceptance', async (req: any, res: any) => {
-    try {
-        const { applicant_ids } = req.body;
-        const { data: applicants } = await sb.from('applicants').select('*, jobs(title)').in('id', applicant_ids);
-        if (!applicants) return res.status(404).json({ error: 'No applicants found' });
-        for (const a of applicants) {
-            await sendEmail({
-                to: a.email,
-                subject: `Congratulations! You've been accepted for ${a.jobs?.title}`,
-                html: `<h2>Congratulations ${a.first_name}!</h2><p>You have been accepted for ${a.jobs?.title}.</p>`
-            });
-        }
-        res.json({ message: 'Emails sent' });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.post('/emails/bulk-rejection', async (req: any, res: any) => {
-    try {
-        const { applicant_ids } = req.body;
-        const { data: applicants } = await sb.from('applicants').select('*, jobs(title)').in('id', applicant_ids);
-        if (!applicants) return res.status(404).json({ error: 'No applicants found' });
-        for (const a of applicants) {
-            await sendEmail({
-                to: a.email,
-                subject: `Application Update: ${a.jobs?.title}`,
-                html: `<h2>Thank you ${a.first_name}</h2><p>We've decided to move forward with other candidates.</p>`
-            });
-        }
-        res.json({ message: 'Emails sent' });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-api.post('/emails/identity-warning', async (req: any, res: any) => {
-    try {
-        const { applicant_ids } = req.body;
-        const { data: applicants } = await sb.from('applicants').select('*, jobs(title)').in('id', applicant_ids);
-        if (!applicants) return res.status(404).json({ error: 'No applicants found' });
-        for (const a of applicants) {
-            await sendEmail({
-                to: a.email,
-                subject: `URGENT: Resume Identity Verification Required`,
-                html: `<h2>Identity Mismatch</h2><p>The name on your resume does not match your profile.</p>`
-            });
-        }
-        res.json({ message: 'Emails sent' });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-// MATCH DETAILS (AI SCAN)
 api.get('/match-details/:candidateId/:jobId', async (req: any, res: any) => {
     try {
         const { candidateId, jobId } = req.params;
@@ -403,13 +219,13 @@ api.get('/match-details/:candidateId/:jobId', async (req: any, res: any) => {
         const jdText = `${job.title || ''} ${job.requirements || job.description || ''}`;
         let bodyText = (applicant.resume_text || '').toLowerCase();
         
+        // Live Fetch for Vercel too
         if (bodyText.length < 50 && applicant.resume_url) {
             try {
                 const response = await fetch(applicant.resume_url);
                 if (response.ok) {
                     const buf = await response.arrayBuffer();
-                    const pdfParse = require('pdf-parse');
-                    const parsed = await pdfParse(Buffer.from(buf));
+                    const parsed = await pdf(Buffer.from(buf));
                     if (parsed && parsed.text) bodyText = parsed.text.toLowerCase();
                 }
             } catch (e) { }
@@ -435,17 +251,4 @@ api.get('/match-details/:candidateId/:jobId', async (req: any, res: any) => {
 
 app.use('/api', api);
 app.use('/', api);
-
-// CATCH-ALL JSON 404 HANDLER (Prevents HTML responses)
-app.use((req: any, res: any) => {
-    console.error(`404: Route not found - ${req.method} ${req.url}`);
-    res.status(404).json({ 
-        error: 'Route not found', 
-        method: req.method, 
-        path: req.path,
-        url: req.url,
-        tip: 'Check your api/index.ts routing and Vercel rewrites'
-    });
-});
-
 export default app;
