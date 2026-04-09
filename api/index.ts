@@ -249,6 +249,32 @@ api.get('/match-details/:candidateId/:jobId', async (req: any, res: any) => {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
+api.post('/otp/send', async (req: any, res: any) => {
+    try {
+        const { email, otp } = req.body;
+        if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
+        await sendEmail({
+            to: email,
+            subject: 'Verification Code',
+            html: `<h1>Verification Code</h1><p>Your code is: <strong>${otp}</strong></p>`
+        });
+        res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
 app.use('/api', api);
 app.use('/', api);
+
+// CATCH-ALL JSON 404 HANDLER (Prevents HTML responses)
+app.use((req: any, res: any) => {
+    console.error(`404: Route not found - ${req.method} ${req.url}`);
+    res.status(404).json({ 
+        error: 'Route not found', 
+        method: req.method, 
+        path: req.path,
+        url: req.url,
+        tip: 'Check your api/index.ts routing and Vercel rewrites'
+    });
+});
+
 export default app;
