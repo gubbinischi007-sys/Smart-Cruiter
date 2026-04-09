@@ -79,50 +79,46 @@ export default function TrackApplication() {
 
         setIsLoading(true);
         setError('');
-        setIsApplicant(tid.startsWith('APP-'));
+        setStatusData(null);
 
         try {
-            if (tid.startsWith('APP-')) {
-                // APPLICANT SEARCH
-                const { data, error: appError } = await supabase
-                    .from('applicants')
-                    .select('*, jobs(title)')
-                    .eq('tracking_id', tid)
-                    .single();
+            // 1. TRY COMPANY SEARCH FIRST (Primary purpose of this page)
+            const { data: companyData, error: rpcError } = await supabase.rpc('get_application_status', {
+                p_tracking_id: tid
+            });
 
-                if (appError || !data) {
-                    setError('No job application found with that ID.');
-                    setIsLoading(false);
-                    return;
-                }
+            if (companyData && !rpcError) {
+                setIsApplicant(false);
+                setStatusData(companyData);
+                setIsLoading(false);
+                return;
+            }
 
+            // 2. TRY APPLICANT SEARCH (Fallback)
+            const { data: appData, error: appError } = await supabase
+                .from('applicants')
+                .select('*, jobs(title)')
+                .eq('tracking_id', tid)
+                .maybeSingle();
+
+            if (appData) {
+                setIsApplicant(true);
                 // Map applicant data to tracker status format
                 const mappedData: StatusData = {
-                    id: data.id,
-                    name: `${data.first_name} ${data.last_name}`,
-                    status: (data.stage === 'hired' ? 'approved' : 
-                             data.stage === 'rejected' ? 'rejected' : 
-                             data.stage === 'applied' ? 'pending' : 'reviewing') as StatusString,
-                    rejection_reason: data.rejection_reason,
-                    created_at: data.applied_at || data.created_at,
-                    updated_at: data.updated_at,
-                    tracking_id: data.tracking_id,
-                    job_title: data.jobs?.title
+                    id: appData.id,
+                    name: `${appData.first_name} ${appData.last_name}`,
+                    status: (appData.stage === 'hired' ? 'approved' : 
+                             appData.stage === 'rejected' ? 'rejected' : 
+                             appData.stage === 'applied' ? 'pending' : 'reviewing') as StatusString,
+                    rejection_reason: appData.rejection_reason,
+                    created_at: appData.applied_at || appData.created_at,
+                    updated_at: appData.updated_at,
+                    tracking_id: appData.tracking_id,
+                    job_title: appData.jobs?.title
                 };
                 setStatusData(mappedData);
-
             } else {
-                // COMPANY SEARCH
-                const { data, error: rpcError } = await supabase.rpc('get_application_status', {
-                    p_tracking_id: tid
-                });
-
-                if (rpcError) throw rpcError;
-                if (!data) {
-                    setError('No company registration found with that ID.');
-                    return;
-                }
-                setStatusData(data);
+                setError('No registration or job application found with that ID.');
             }
         } catch (err: any) {
             setError(err?.message || 'Failed to retrieve status.');

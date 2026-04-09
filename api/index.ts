@@ -200,41 +200,27 @@ api.get('/hr-team', async (req: any, res: any) => {
 
         // 3. Merge status
         const enriched = (profiles || []).map((p: any) => {
-            const authUser = authMap.get(p.id);
-            const bannedUntil = (authUser as any)?.banned_until;
+            const authUser = authMap.get(p.id) as any;
+            const bannedUntil = authUser?.banned_until;
             const isSuspended = bannedUntil && new Date(bannedUntil) > new Date();
-            return {
-                id: p.id,
-                name: p.name || 'Unknown',
-                email: p.email,
-                role_title: p.role_title || '',
-                created_at: p.created_at,
-                status: isSuspended ? 'suspended' : 'active'
-            };
+            return { ...p, status: isSuspended ? 'suspended' : 'active' };
         });
 
         // 4. Fetch pending invitations
-        const { data: invites, error: inviteErr } = await sb
+        const { data: invites } = await sb
             .from('hr_invitations')
             .select('id, email, role_title, created_at')
             .eq('company_id', companyId)
             .eq('status', 'pending');
 
         const pendingMembers = (invites || []).map((inv: any) => ({
-            id: inv.id,
-            name: (inv.email || 'Pending').split('@')[0],
-            email: inv.email,
-            role_title: inv.role_title || '',
-            created_at: inv.created_at,
-            status: 'pending'
+            ...inv,
+            name: 'Pending...',
+            status: 'pending',
         }));
 
-        const allMembers = [...enriched, ...pendingMembers];
-        res.json(allMembers);
-    } catch (e: any) { 
-        console.error('HR Team Fetch Error:', e);
-        res.status(500).json({ error: e.message, details: 'Error fetching HR team components' }); 
-    }
+        res.json([...enriched, ...pendingMembers]);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 // MANUAL HR CREATION
