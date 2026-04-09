@@ -76,24 +76,24 @@ export default function HRTeamManagement() {
     }
   };
 
-  const handleInvite = async (e: React.FormEvent) => {
+  const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.email) return;
+    if (!formData.name || !formData.email || !formData.password) {
+      showModal('error', 'Missing Information', 'Please provide a name, email, and password.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      await hrInvitesApi.send({
-        email: formData.email,
-        role_title: formData.role_title
-      });
-      showModal('success', 'Invitation Sent!',
-        `An invite link has been sent to ${formData.email}. They can now set up their own account.`);
+      await hrTeamApi.create(formData);
+      showModal('success', 'Account Created!',
+        `${formData.name} has been added to your HR team. They can now log in using their email and the password you set.`);
       setFormData({ name: '', email: '', password: '', role_title: '' });
       setShowCreateForm(false);
       loadMembers();
     } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Failed to send invitation.';
-      showModal('error', 'Invitation Failed', msg);
+      const msg = err?.response?.data?.error || err?.message || 'Failed to create account.';
+      showModal('error', 'Creation Failed', msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -199,7 +199,7 @@ export default function HRTeamManagement() {
             onClick={() => setShowCreateForm(true)}
           >
             <UserPlus size={16} />
-            Invite HR Member
+            Add HR Member
           </button>
         </div>
       </div>
@@ -361,9 +361,9 @@ export default function HRTeamManagement() {
           <div className="hr-slideover" onClick={e => e.stopPropagation()}>
             <div className="hr-slideover-header">
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>Invite HR Member</h2>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>Create HR Account</h2>
                 <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#9ca3af' }}>
-                  Send a secure invitation link. They will set their own password.
+                  Create a new account manually. You will set their initial password.
                 </p>
               </div>
               <button onClick={() => setShowCreateForm(false)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '0.25rem' }}>
@@ -371,7 +371,22 @@ export default function HRTeamManagement() {
               </button>
             </div>
 
-            <form onSubmit={handleInvite} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <form onSubmit={handleCreateAccount} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Name */}
+              <div className="hr-field">
+                <label className="hr-label">Full Name *</label>
+                <div className="hr-input-wrapper">
+                  <User size={16} className="hr-input-icon" />
+                  <input
+                    type="text"
+                    className="hr-input"
+                    placeholder="e.g. Rahul Sharma"
+                    value={formData.name}
+                    onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
+                    required
+                  />
+                </div>
+              </div>
               {/* Email */}
               <div className="hr-field">
                 <label className="hr-label">Work Email *</label>
@@ -403,6 +418,30 @@ export default function HRTeamManagement() {
                 </div>
               </div>
 
+              {/* Password */}
+              <div className="hr-field">
+                <label className="hr-label">Set Password *</label>
+                <div className="hr-input-wrapper">
+                  <Lock size={16} className="hr-input-icon" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    className="hr-input"
+                    placeholder="Min. 6 characters"
+                    value={formData.password}
+                    onChange={e => setFormData(p => ({ ...p, password: e.target.value }))}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="hr-password-toggle"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 0 }}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
                 <button
                   type="button"
@@ -417,8 +456,8 @@ export default function HRTeamManagement() {
                   disabled={isSubmitting}
                   style={{ flex: 1 }}
                 >
-                  <Send size={16} />
-                  {isSubmitting ? 'Sending Invite...' : 'Send Invitation link'}
+                  <UserPlus size={16} />
+                  {isSubmitting ? 'Creating Account...' : 'Create Account'}
                 </button>
               </div>
             </form>

@@ -332,6 +332,26 @@
   color: #4b5563;
 }
 
+.hr-password-toggle {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.hr-password-toggle:hover {
+  color: #818cf8;
+}
+
 .hr-btn-cancel {
   display: flex;
   align-items: center;

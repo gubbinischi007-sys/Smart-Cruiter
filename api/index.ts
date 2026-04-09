@@ -223,6 +223,52 @@ api.get('/hr-team', async (req: any, res: any) => {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
+// MANUAL HR CREATION
+api.post('/hr-team', async (req: any, res: any) => {
+    try {
+        const companyId = req.headers['x-company-id'];
+        if (!companyId) return res.status(400).json({ error: 'Company ID is required.' });
+        
+        const { name, email, password, role_title } = req.body;
+        if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required.' });
+
+        // 1. Create Auth User
+        const { data: authData, error: authErr } = await sb.auth.admin.createUser({
+            email: email.trim().toLowerCase(),
+            password,
+            email_confirm: true,
+            user_metadata: { name: name.trim(), role: 'hr' }
+        });
+
+        let userId;
+        if (authErr) {
+            if (authErr.message.includes('already registered') || authErr.message.includes('already exists')) {
+                const { data: userData } = await sb.auth.admin.listUsers();
+                const existing = userData?.users.find(u => u.email?.toLowerCase() === email.trim().toLowerCase());
+                if (!existing) throw new Error('User supposedly exists but not found.');
+                userId = existing.id;
+            } else {
+                throw authErr;
+            }
+        } else {
+            userId = authData.user.id;
+        }
+
+        // 2. Upsert Profile
+        const { error: profileErr } = await sb.from('user_profiles').upsert({
+            id: userId,
+            email: email.trim().toLowerCase(),
+            name: name.trim(),
+            role: 'hr',
+            role_title: role_title?.trim() || '',
+            company_id: companyId
+        });
+        if (profileErr) throw profileErr;
+
+        res.status(201).json({ message: 'HR member account created successfully.' });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
 // HR INVITES
 api.post('/hr-invites/send', async (req: any, res: any) => {
     try {
