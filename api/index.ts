@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import nodemailer from 'nodemailer';
 import multer from 'multer';
-import pdf from 'pdf-parse';
+// pdf-parse loaded dynamically to avoid serverless crash on import
 
 dotenv.config();
 
@@ -24,6 +24,8 @@ const transporter = nodemailer.createTransport({
 
 async function sendEmail(opts: { to: string; subject: string; html: string }) {
     console.log(`Attempting to send email to ${opts.to}...`);
+
+    // Log to DB separately — never block email send if this fails
     try {
         await sb.from('notifications').insert({
             id: uuidv4(),
@@ -31,20 +33,24 @@ async function sendEmail(opts: { to: string; subject: string; html: string }) {
             subject: opts.subject,
             message: opts.html,
             type: 'email',
-            is_read: 0,
             created_at: new Date().toISOString()
         });
         console.log('Notification log saved to Supabase.');
+    } catch (dbErr: any) {
+        console.warn('DB log failed (non-fatal):', dbErr.message);
+    }
 
+    // Always attempt SMTP send independently
+    try {
         if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
             await transporter.sendMail({ from: process.env.EMAIL_USER, ...opts });
             console.log(`Email successfully sent to ${opts.to} via Gmail.`);
         } else {
-            console.warn('EMAIL_USER or EMAIL_PASS environment variables are missing on Vercel. Skipping SMTP send.');
-            console.log('Would have sent:', opts);
+            console.warn('EMAIL_USER or EMAIL_PASS missing on Vercel. Email not sent.');
         }
-    } catch (e: any) {
-        console.error('Email sending error:', e.message || e);
+    } catch (mailErr: any) {
+        console.error('SMTP send error:', mailErr.message);
+        throw mailErr; // Re-throw so the API route can return a proper error
     }
 }
 
@@ -128,7 +134,7 @@ api.post('/applicants', upload.single('resume'), async (req: any, res: any) => {
         const { job_id, first_name, last_name, email, phone, resume_url, cover_letter } = req.body;
         if (!job_id || !first_name || !last_name || !email) return res.status(400).json({ error: 'Missing required fields' });
         let resumeText = '';
-        if (req.file) { try { const p = await pdf(req.file.buffer); resumeText = p.text || ''; } catch (err) { } }
+        if (req.file) { try { const pdfParse = require('pdf-parse'); const p = await pdfParse(req.file.buffer); resumeText = p.text || ''; } catch (err) { } }
         const { data: job } = await sb.from('jobs').select('*').eq('id', job_id).single();
         if (!job || job.status !== 'open') return res.status(400).json({ error: 'Job not found or closed.' });
         const now = new Date().toISOString();
@@ -402,7 +408,8 @@ api.get('/match-details/:candidateId/:jobId', async (req: any, res: any) => {
                 const response = await fetch(applicant.resume_url);
                 if (response.ok) {
                     const buf = await response.arrayBuffer();
-                    const parsed = await pdf(Buffer.from(buf));
+                    const pdfParse = require('pdf-parse');
+                    const parsed = await pdfParse(Buffer.from(buf));
                     if (parsed && parsed.text) bodyText = parsed.text.toLowerCase();
                 }
             } catch (e) { }
