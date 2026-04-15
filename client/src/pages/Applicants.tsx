@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { applicantsApi, jobsApi, emailApi, historyApi } from '../services/api';
 import { logAction } from '../utils/historyLogger';
-import { XCircle, CheckCircle, User, Briefcase, Copy, GitMerge, Info, AlertTriangle, X, ShieldAlert, Mail, Search } from 'lucide-react';
+import { XCircle, CheckCircle, User, Briefcase, Copy, GitMerge, Info, AlertTriangle, X, ShieldAlert, Mail, Search, Eye } from 'lucide-react';
 import './Applicants.css';
 import MatchScoreModal from '../components/MatchScoreModal';
 
