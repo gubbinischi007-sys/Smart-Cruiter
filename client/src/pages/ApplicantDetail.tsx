@@ -88,6 +88,15 @@ export default function ApplicantDetail() {
     rules: COMMON_COMPANY_RULES,
   });
   const [cancelInterviewId, setCancelInterviewId] = useState<string | null>(null);
+  const [rejectionModal, setRejectionModal] = useState<{
+    isOpen: boolean;
+    newStage: string;
+    reason: string;
+  }>({
+    isOpen: false,
+    newStage: '',
+    reason: 'Thank you for your interest. After carefully reviewing your application, we have decided to move forward with other candidates who better match our current needs.'
+  });
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const addNotification = (type: 'success' | 'error' | 'info', message: string) => {
@@ -160,19 +169,35 @@ export default function ApplicantDetail() {
 
   const handleStageUpdate = async (newStage: string) => {
     if (!id) return;
+    if (newStage === 'rejected' || newStage === 'declined') {
+      setRejectionModal({
+        isOpen: true,
+        newStage,
+        reason: 'Thank you for your interest. After carefully reviewing your application, we have decided to move forward with other candidates who better match our current needs.'
+      });
+      return;
+    }
+    
     try {
-      let rejectionReason = undefined;
-      if (newStage === 'rejected' || newStage === 'declined') {
-        const promptResult = window.prompt("Please provide a reason for rejection (this will be sent to the candidate):");
-        if (promptResult === null) return; // user cancelled
-        rejectionReason = promptResult;
-      }
-
-      await applicantsApi.update(id, { stage: newStage, rejection_reason: rejectionReason });
+      await applicantsApi.update(id, { stage: newStage });
       logAction(`Updated applicant ${applicant?.first_name} ${applicant?.last_name} to ${newStage}`);
       loadData();
     } catch (error) {
       console.error('Failed to update applicant stage:', error);
+      addNotification('error', 'Failed to update applicant stage');
+    }
+  };
+
+  const confirmRejection = async () => {
+    if (!id) return;
+    const { newStage, reason } = rejectionModal;
+    try {
+      await applicantsApi.update(id, { stage: newStage, rejection_reason: reason });
+      setRejectionModal({ ...rejectionModal, isOpen: false });
+      logAction(`Updated applicant ${applicant?.first_name} ${applicant?.last_name} to ${newStage}`);
+      loadData();
+      addNotification('success', `Applicant moved to ${newStage}`);
+    } catch (error) {
       addNotification('error', 'Failed to update applicant stage');
     }
   };
@@ -537,48 +562,54 @@ export default function ApplicantDetail() {
           )}
         </div>
 
-        <div className="card reference-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <div className="card reference-card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div className="reference-header">
             <h2 className="section-title" style={{ marginBottom: 0 }}>Reference Checks</h2>
-            <button 
-              className="btn btn-sm btn-primary"
-              onClick={() => setShowReferenceForm(true)}
-            >
-              Request Reference
-            </button>
           </div>
 
-          {references.length === 0 ? (
-            <p className="text-muted text-center py-4">No references requested yet.</p>
-          ) : (
-            <div className="references-list">
-              {references.map((ref) => (
-                <div key={ref.id} className="reference-item">
-                  <div className="ref-item-header">
-                    <div>
-                      <h3 className="text-sm font-semibold">{ref.ref_name}</h3>
-                      <p className="text-xs text-muted">{ref.ref_email}</p>
-                    </div>
-                    <span className={`status-badge-small ${ref.status}`}>
-                      {ref.status}
-                    </span>
-                  </div>
-                  
-                  {ref.status === 'submitted' && ref.responses && (
-                    <div className="ref-response-preview">
-                      <div className="rating-small">
-                        <Star size={12} fill="#f59e0b" color="#f59e0b" />
-                        <span>Competency: {ref.responses.competency_rating}/5</span>
+          <div style={{ flex: 1 }}>
+            {references.length === 0 ? (
+              <p className="text-muted text-center py-4">No references requested yet.</p>
+            ) : (
+              <div className="references-list">
+                {references.map((ref) => (
+                  <div key={ref.id} className="reference-item">
+                    <div className="ref-item-header">
+                      <div>
+                        <h3 className="text-sm font-semibold">{ref.ref_name}</h3>
+                        <p className="text-xs text-muted">{ref.ref_email}</p>
                       </div>
-                      <p className="text-xs italic text-gray-400 line-clamp-2">
-                        "{ref.responses.strengths}"
-                      </p>
+                      <span className={`status-badge-small ${ref.status}`}>
+                        {ref.status}
+                      </span>
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+                    
+                    {ref.status === 'submitted' && ref.responses && (
+                      <div className="ref-response-preview">
+                        <div className="rating-small">
+                          <Star size={12} fill="#f59e0b" color="#f59e0b" />
+                          <span>Competency: {ref.responses.competency_rating}/5</span>
+                        </div>
+                        <p className="text-xs italic text-gray-400 line-clamp-2">
+                          "{ref.responses.strengths}"
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 'auto', paddingTop: '1.5rem' }}>
+            <button 
+              className="btn-request-ref"
+              onClick={() => setShowReferenceForm(true)}
+              style={{ width: '100%' }}
+            >
+              Request New Reference
+            </button>
+          </div>
         </div>
 
         <div className="card interview-card">
@@ -1034,6 +1065,50 @@ export default function ApplicantDetail() {
                   <button type="submit" className="btn btn-primary" style={{ background: '#10b981', borderColor: '#10b981' }}>Submit Scorecard</button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rejectionModal.isOpen && (
+        <div className="premium-modal-overlay">
+          <div className="premium-modal-container" style={{ maxWidth: '440px' }}>
+            <div className="premium-modal-content">
+              <div className="modal-header">
+                <div className="modal-header-icon icon-bg-reject" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}>
+                  <XCircle size={24} />
+                </div>
+                <h3 className="modal-title">Reject Applicant</h3>
+              </div>
+              
+              <span className="modal-subtitle">
+                Please provide a reason for rejection. This message will be sent to the candidate.
+              </span>
+
+              <div className="modal-form-group" style={{ marginTop: '1.5rem' }}>
+                <label className="modal-form-label">Rejection Message</label>
+                <textarea
+                  className="modal-textarea"
+                  rows={4}
+                  value={rejectionModal.reason}
+                  onChange={(e) => setRejectionModal({ ...rejectionModal, reason: e.target.value })}
+                />
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  onClick={() => setRejectionModal({ ...rejectionModal, isOpen: false })}
+                  className="modal-btn btn-cancel"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmRejection}
+                  className="modal-btn btn-confirm-reject"
+                >
+                  Confirm Rejection
+                </button>
+              </div>
             </div>
           </div>
         </div>

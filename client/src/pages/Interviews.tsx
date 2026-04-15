@@ -73,11 +73,11 @@ export default function Interviews() {
                     <p className="text-muted">Manage your upcoming and past interviews.</p>
                 </div>
                 {interviews.length > 0 && (
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                        <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Filter Role:</label>
+                    <div className="flex items-center gap-3 bg-slate-900/40 p-1.5 px-3 rounded-xl border border-white/5">
+                        <label className="text-xs font-bold uppercase tracking-wider" style={{ color: '#6366f1' }}>Filter Role</label>
                         <select
-                            className="input"
-                            style={{ minWidth: '220px', cursor: 'pointer', padding: '0.5rem 1rem' }}
+                            className="select-premium"
+                            style={{ minWidth: '180px' }}
                             value={filterJob}
                             onChange={e => setFilterJob(e.target.value)}
                         >

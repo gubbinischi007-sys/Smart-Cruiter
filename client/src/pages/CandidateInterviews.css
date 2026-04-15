@@ -144,23 +144,30 @@
     color: var(--text-primary);
 }
 
-.link-button {
+.btn-join-meeting {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
-    color: #6366f1;
-    font-weight: 500;
+    gap: 0.5rem;
+    padding: 0.75rem 1.75rem;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white !important;
+    font-weight: 700;
+    font-size: 0.95rem;
+    border-radius: 12px;
     text-decoration: none;
-    transition: color 0.15s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+    margin-top: 0.5rem;
 }
 
-.link-button:hover {
-    color: #4f46e5;
-    text-decoration: underline;
+.btn-join-meeting:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+    filter: brightness(1.1);
 }
 
-.rotate-icon {
-    transform: rotate(135deg);
+.btn-join-meeting:active {
+    transform: translateY(0);
 }
 
 .interview-notes {

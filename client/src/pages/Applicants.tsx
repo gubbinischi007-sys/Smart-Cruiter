@@ -44,9 +44,19 @@ export default function Applicants() {
     type: 'accept' | 'reject' | 'merge' | null;
     reason: string
   }>({
-    isOpen: false,
-    type: null,
     reason: ''
+  });
+  
+  const [singleActionModal, setSingleActionModal] = useState<{
+    isOpen: boolean;
+    applicantId: string;
+    newStage: string;
+    reason: string;
+  }>({
+    isOpen: false,
+    applicantId: '',
+    newStage: '',
+    reason: 'Thank you for your interest. After carefully reviewing your application, we have decided to move forward with other candidates who better match our current needs.'
   });
 
   const [matchScoreModal, setMatchScoreModal] = useState<{ isOpen: boolean, score: number, applicantName: string, candidateId: string, jobId: string } | null>(null);
@@ -94,18 +104,33 @@ export default function Applicants() {
   };
 
   const handleStageChange = async (applicantId: string, newStage: string) => {
+    if (newStage === 'rejected' || newStage === 'declined') {
+      setSingleActionModal({
+        isOpen: true,
+        applicantId,
+        newStage,
+        reason: 'Thank you for your interest. After carefully reviewing your application, we have decided to move forward with other candidates who better match our current needs.'
+      });
+      return;
+    }
+    
     try {
-      let rejectionReason = undefined;
-      if (newStage === 'rejected' || newStage === 'declined') {
-        const promptResult = window.prompt("Please provide a reason for rejection (this will be sent to the candidate):");
-        if (promptResult === null) return; // user cancelled
-        rejectionReason = promptResult;
-      }
-
-      await applicantsApi.update(applicantId, { stage: newStage, rejection_reason: rejectionReason });
+      await applicantsApi.update(applicantId, { stage: newStage });
       loadApplicants();
     } catch (error) {
       console.error('Failed to update applicant stage:', error);
+      addNotification('error', 'Failed to update applicant stage');
+    }
+  };
+
+  const confirmSingleAction = async () => {
+    const { applicantId, newStage, reason } = singleActionModal;
+    try {
+      await applicantsApi.update(applicantId, { stage: newStage, rejection_reason: reason });
+      setSingleActionModal({ ...singleActionModal, isOpen: false });
+      loadApplicants();
+      addNotification('success', `Applicant moved to ${newStage}`);
+    } catch (error) {
       addNotification('error', 'Failed to update applicant stage');
     }
   };
@@ -331,6 +356,51 @@ export default function Applicants() {
                   className={`modal-btn ${confirmationModal.type === 'accept' ? 'btn-confirm-accept' : 'btn-confirm-reject'}`}
                 >
                   {confirmationModal.type === 'merge' ? 'Merge' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Applicant Rejection Modal */}
+      {singleActionModal.isOpen && (
+        <div className="premium-modal-overlay">
+          <div className="premium-modal-container">
+            <div className="premium-modal-content">
+              <div className="modal-header">
+                <div className="modal-header-icon icon-bg-reject">
+                  <XCircle size={24} />
+                </div>
+                <h3 className="modal-title">Reject Applicant</h3>
+              </div>
+              
+              <span className="modal-subtitle">
+                Please provide a reason for rejection. This message will be shared with the candidate.
+              </span>
+
+              <div className="modal-form-group">
+                <label className="modal-form-label">Rejection Message</label>
+                <textarea
+                  className="modal-textarea"
+                  rows={4}
+                  value={singleActionModal.reason}
+                  onChange={(e) => setSingleActionModal({ ...singleActionModal, reason: e.target.value })}
+                />
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  onClick={() => setSingleActionModal({ ...singleActionModal, isOpen: false })}
+                  className="modal-btn btn-cancel"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmSingleAction}
+                  className="modal-btn btn-confirm-reject"
+                >
+                  Confirm Rejection
                 </button>
               </div>
             </div>
@@ -604,24 +674,7 @@ export default function Applicants() {
                   <td>
                     <Link
                       to={`/admin/applicants/${applicant.id}`}
-                      className="px-4 py-1.5 text-xs font-semibold rounded transition-all duration-200 flex items-center gap-2"
-                      style={{
-                        background: 'rgba(30, 27, 75, 0.6)',
-                        border: '1px solid rgba(99, 102, 241, 0.4)',
-                        color: '#c7d2fe',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                        width: 'fit-content'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(49, 46, 129, 0.8)';
-                        e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.8)';
-                        e.currentTarget.style.color = '#ffffff';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(30, 27, 75, 0.6)';
-                        e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
-                        e.currentTarget.style.color = '#c7d2fe';
-                      }}
+                      className="btn-view-profile"
                     >
                       <Eye size={14} /> View Profile
                     </Link>

@@ -12,7 +12,7 @@ const router = express.Router();
 // Get all interviews (with optional filters)
 router.get('/', async (req, res) => {
   try {
-    const { applicant_id, job_id, status } = req.query;
+    const { applicant_id, job_id, status, applicant_email } = req.query;
     const companyId = req.headers['x-company-id'];
     const [interviews, applicants, jobs] = await Promise.all([
       all<any>('SELECT * FROM interviews'),
@@ -31,6 +31,7 @@ router.get('/', async (req, res) => {
         
         if (companyId && job.company_id !== companyId) return false;
         if (applicant_id && i.applicant_id !== applicant_id) return false;
+        if (applicant_email && applicant.email !== applicant_email) return false;
         if (job_id && i.job_id !== job_id) return false;
         if (status && i.status !== status) return false;
         return true;

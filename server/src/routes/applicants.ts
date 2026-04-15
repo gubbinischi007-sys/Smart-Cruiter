@@ -358,6 +358,28 @@ router.post('/', upload.single('resume'), async (req, res) => {
           applicant.stage = 'shortlisted';
           (applicant as any).score = score;
         }
+
+        // Send Shortlist Notification with Interview Scheduler Link
+        const emailHtml = `
+          <div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 32px; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0;">
+              <h2>Great News, ${input.first_name}!</h2>
+              <p>Your application for the <strong>${job.title}</strong> role has been fast-tracked.</p>
+              <p>Please select a date and time that works best for your interview using the link below.</p>
+              <div style="text-align: center; margin-top: 20px;">
+                  <a href="${process.env.VITE_CLIENT_URL || 'http://localhost:3000'}/candidate/interviews" 
+                     style="display: inline-block; padding: 12px 24px; background: #6366f1; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600;">
+                      Schedule My Interview
+                  </a>
+              </div>
+              <p style="margin-top: 30px; font-size: 14px; color: #64748b;">Best regards,<br/>The Talent Acquisition Team</p>
+          </div>
+        `;
+
+        sendEmail({
+          to: input.email,
+          subject: `Fast-Tracked: Selecting an interview time for ${job.title}`,
+          html: emailHtml
+        }).catch(err => console.error('Failed to send shortlist automation email:', err));
       } else {
         // Normal score -> Default Applied
         const stage = score >= 81 ? 'recommended' : 'applied';

@@ -112,8 +112,8 @@ export default function CandidateInterviews() {
                                         <div className="detail-item">
                                             <h4><Video size={16} /> Meeting Link</h4>
                                             {interview.meeting_link ? (
-                                                <a href={interview.meeting_link} target="_blank" rel="noopener noreferrer" className="link-button">
-                                                    Join virtual meeting <ArrowLeft size={14} className="rotate-icon" />
+                                                <a href={interview.meeting_link} target="_blank" rel="noopener noreferrer" className="btn-join-meeting">
+                                                    <Video size={18} /> Join Virtual Meeting
                                                 </a>
                                             ) : (
                                                 <p className="text-muted">Link will be provided prior to interview</p>
