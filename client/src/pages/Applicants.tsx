@@ -604,12 +604,13 @@ export default function Applicants() {
                   <td>
                     <Link
                       to={`/admin/applicants/${applicant.id}`}
-                      className="px-4 py-1.5 text-xs font-semibold rounded transition-all duration-200 inline-block"
+                      className="px-4 py-1.5 text-xs font-semibold rounded transition-all duration-200 flex items-center gap-2"
                       style={{
                         background: 'rgba(30, 27, 75, 0.6)',
                         border: '1px solid rgba(99, 102, 241, 0.4)',
                         color: '#c7d2fe',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                        width: 'fit-content'
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.background = 'rgba(49, 46, 129, 0.8)';
@@ -622,7 +623,7 @@ export default function Applicants() {
                         e.currentTarget.style.color = '#c7d2fe';
                       }}
                     >
-                      View Profile
+                      <Eye size={14} /> View Profile
                     </Link>
                   </td>
                 </tr>
