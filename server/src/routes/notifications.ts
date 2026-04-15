@@ -12,14 +12,15 @@ router.get('/', async (req, res) => {
             return res.status(400).json({ error: 'Email query parameter is required' });
         }
 
-        const notifications = await all<any>(
-            `SELECT * FROM notifications 
-       WHERE LOWER(recipient_email) = LOWER(?) 
-       ORDER BY created_at DESC`,
-            [email]
-        );
+        const { data: notifications, error } = await (await import('../lib/supabase.js')).supabase
+            .from('notifications')
+            .select('*')
+            .ilike('recipient_email', (email as string).trim())
+            .order('created_at', { ascending: false });
 
-        res.json(notifications);
+        if (error) throw error;
+
+        res.json(notifications || []);
     } catch (error) {
         console.error('Error fetching notifications:', error);
         res.status(500).json({ error: 'Failed to fetch notifications' });
@@ -32,12 +33,17 @@ router.get('/unread-count', async (req, res) => {
         const { email } = req.query;
         if (!email) return res.status(400).json({ error: 'Email is required' });
 
-        const result = await get<{ count: number }>(
-            'SELECT COUNT(*) as count FROM notifications WHERE LOWER(recipient_email) = LOWER(?) AND is_read = 0',
-            [email]
-        );
-        res.json({ count: result?.count || 0 });
+        const { count, error } = await (await import('../lib/supabase.js')).supabase
+            .from('notifications')
+            .select('*', { count: 'exact', head: true })
+            .ilike('recipient_email', (email as string).trim())
+            .eq('is_read', 0);
+
+        if (error) throw error;
+        
+        res.json({ count: count || 0 });
     } catch (error) {
+        console.error('Error fetching unread count:', error);
         res.status(500).json({ error: 'Failed to fetch unread count' });
     }
 });
@@ -46,9 +52,18 @@ router.get('/unread-count', async (req, res) => {
 router.patch('/:id/read', async (req, res) => {
     try {
         const { id } = req.params;
-        await run('UPDATE notifications SET is_read = 1 WHERE id = ?', [id]);
+        console.log(`[Notifications] Marking as read: ${id}`);
+        
+        const { error } = await (await import('../lib/supabase.js')).supabase
+            .from('notifications')
+            .update({ is_read: 1 })
+            .eq('id', id);
+
+        if (error) throw error;
+        
         res.json({ success: true });
     } catch (error) {
+        console.error('Error marking as read:', error);
         res.status(500).json({ error: 'Failed to mark as read' });
     }
 });

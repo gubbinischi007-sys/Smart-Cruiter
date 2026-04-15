@@ -5,16 +5,19 @@ async function sendMissedEmails() {
   await initDatabase();
   console.log('Finding rejected and declined applicants...');
 
-  const applicants = await all<any>(`
-    SELECT a.*, j.title as job_title 
-    FROM applicants a 
-    LEFT JOIN jobs j ON a.job_id = j.id 
-    WHERE a.stage IN ('rejected', 'declined')
-  `);
+  const applicants = await all<any>("SELECT * FROM applicants WHERE stage IN ('rejected', 'declined')");
+  const jobs = await all<any>("SELECT id, title FROM jobs");
+  const jobsMap = Object.fromEntries(jobs.map(j => [j.id, j]));
 
-  console.log(`Found ${applicants.length} applicants to resend emails to.`);
+  // Manual join
+  const applicantsWithJobs = applicants.map(a => ({
+    ...a,
+    job_title: jobsMap[a.job_id]?.title || 'Job Application'
+  }));
 
-  for (const a of applicants) {
+  console.log(`Found ${applicantsWithJobs.length} applicants to resend emails to.`);
+
+  for (const a of applicantsWithJobs) {
     if (!a.email) continue;
 
     // Add rejection reason if it's currently missing

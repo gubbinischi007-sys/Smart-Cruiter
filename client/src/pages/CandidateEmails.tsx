@@ -19,7 +19,7 @@ interface EmailNotification {
 
 export default function CandidateEmails() {
     const { user } = useAuth();
-    const { refreshUnreadCount } = useNotification();
+    const { refreshUnreadCount, decrementUnreadCount } = useNotification();
     const [emails, setEmails] = useState<EmailNotification[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedEmail, setSelectedEmail] = useState<EmailNotification | null>(null);
@@ -661,12 +661,25 @@ export default function CandidateEmails() {
                                     </div>
 
                                     <div
-                                        onClick={() => {
+                                        onClick={async () => {
+                                            const wasUnread = email.is_read === 0;
+                                            console.log(`[Emails] Clicked email: ${email.id}, wasUnread: ${wasUnread}`);
+                                            
                                             setSelectedEmail(email);
-                                            notificationsApi.markAsRead(email.id)
-                                                .then(() => refreshUnreadCount())
-                                                .catch(console.error);
-                                            setEmails(prev => prev.map(e => e.id === email.id ? { ...e, is_read: 1 } : e));
+                                            
+                                            if (wasUnread) {
+                                                console.log('[Emails] Marking as read...');
+                                                try {
+                                                    await notificationsApi.markAsRead(email.id);
+                                                    console.log('[Emails] Marked as read on server');
+                                                    refreshUnreadCount();
+                                                } catch (err) {
+                                                    console.error('[Emails] Server markAsRead failed:', err);
+                                                }
+                                                
+                                                setEmails(prev => prev.map(e => e.id === email.id ? { ...e, is_read: 1 } : e));
+                                                decrementUnreadCount();
+                                            }
                                         }}
                                         style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, cursor: 'pointer' }}
                                     >

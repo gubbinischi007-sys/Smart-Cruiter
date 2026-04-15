@@ -14,17 +14,26 @@ export function startReminderCron() {
             // Get current UTC time
             const now = new Date();
 
-            // Find interviews that are scheduled in the next 24.5 hours but haven't received a reminder
-            // We look at scheduled_at which should be an ISO string
-            const interviews = await all(`
-        SELECT i.*, a.first_name, a.last_name, a.email, j.title as job_title 
-        FROM interviews i
-        JOIN applicants a ON i.applicant_id = a.id
-        JOIN jobs j ON i.job_id = j.id
-        WHERE i.status = 'scheduled' AND i.reminder_sent = 0
-      `);
+            const [interviews, applicants, jobs] = await Promise.all([
+                all<any>("SELECT * FROM interviews WHERE status = 'scheduled' AND reminder_sent = 0"),
+                all<any>("SELECT id, first_name, last_name, email FROM applicants"),
+                all<any>("SELECT id, title FROM jobs")
+            ]);
 
-            for (const interview of interviews) {
+            const applicantsMap = Object.fromEntries(applicants.map(a => [a.id, a]));
+            const jobsMap = Object.fromEntries(jobs.map(j => [j.id, j]));
+
+            const enrichedInterviews = interviews
+                .filter(i => applicantsMap[i.applicant_id] && jobsMap[i.job_id])
+                .map(i => ({
+                    ...i,
+                    first_name: applicantsMap[i.applicant_id].first_name,
+                    last_name: applicantsMap[i.applicant_id].last_name,
+                    email: applicantsMap[i.applicant_id].email,
+                    job_title: jobsMap[i.job_id].title
+                }));
+
+            for (const interview of enrichedInterviews) {
                 if (!interview.scheduled_at) continue;
 
                 const scheduledTime = new Date(interview.scheduled_at);

@@ -301,6 +301,27 @@
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
+}
+
+.hr-password-toggle {
+  position: absolute;
+  right: 0.875rem;
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.hr-password-toggle:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .hr-input-icon {
@@ -315,7 +336,7 @@
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
-  padding: 0.75rem 1rem 0.75rem 2.5rem;
+  padding: 0.75rem 2.5rem;
   color: white;
   font-size: 0.9rem;
   outline: none;

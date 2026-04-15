@@ -204,9 +204,7 @@ export default function Dashboard() {
   };
 
 
-  /* ... existing loadDashboard and render logic ... */
-  // NOTE: I will return the FULL component body from standard "if (loading)" downwards to ensure correct placement, 
-  // but replacing the entire cards block is cleaner.
+
 
   if (loading) {
     return (

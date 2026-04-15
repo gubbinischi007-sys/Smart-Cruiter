@@ -101,7 +101,10 @@ router.get('/', async (req, res) => {
 // Retroactive Sync of Stages for ALL existing applicants
 router.get('/sync-all', async (req, res) => {
     try {
-        const applicants = await all<any>('SELECT a.*, j.title as job_title, j.requirements, j.description FROM applicants a LEFT JOIN jobs j ON a.job_id = j.id');
+        const applicants = await all<any>('SELECT * FROM applicants');
+        const jobs = await all<any>('SELECT id, title, requirements, description FROM jobs');
+        const jobsMap = Object.fromEntries(jobs.map(j => [j.id, j]));
+
         const results = { rejected: 0, shortlisted: 0, unchanged: 0 };
 
         const stopWords = new Set(['the', 'and', 'to', 'of', 'in', 'for', 'with', 'on', 'is', 'as', 'at', 'by', 'an', 'be', 'this', 'that', 'are', 'from', 'or', 'have', 'has', 'will', 'you', 'your', 'we', 'our', 'it', 'can', 'all', 'more', 'their', 'which', 'about', 'what', 'how', 'when', 'where', 'who', 'not', 'but', 'so', 'if', 'then', 'than', 'such', 'into', 'out', 'up', 'down', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'some', 'any', 'both', 'each', 'few', 'most', 'other', 'no', 'nor', 'only', 'own', 'same', 'too', 'very', 'job', 'role', 'team', 'work', 'company', 'experience', 'skills', 'looking', 'years', 'working', 'using', 'ability', 'knowledge', 'strong', 'good', 'excellent', 'responsible', 'developing', 'maintaining', 'building', 'creating', 'testing', 'writing', 'managing', 'leading', 'supporting', 'understanding', 'ensure', 'ensuring', 'provide', 'providing', 'required', 'requirements', 'including', 'design', 'designing', 'development', 'software', 'applications', 'systems', 'business', 'data', 'technical', 'technology', 'environment', 'project', 'projects', 'solutions', 'process', 'processes', 'management', 'client', 'clients', 'user', 'users', 'product', 'products', 'service', 'services', 'support', 'performance', 'quality', 'best', 'practices', 'drive', 'driving', 'within', 'across', 'highly', 'related', 'field', 'computer', 'science', 'engineering', 'equivalent']);
@@ -139,8 +142,12 @@ router.get('/sync-all', async (req, res) => {
             const simulatedFallback = 'university bachelor degree master degree developer engineer experience professional intern software java python javascript react node sql aws';
             const finalBodyText = bodyText.length > 50 ? bodyText : simulatedFallback;
 
-            const applicantText = `${applicant.job_title || ''} ${applicant.first_name || ''} ${applicant.resume_url || ''} ${applicant.cover_letter || ''} ${finalBodyText}`.toLowerCase();
-            const matchResult = await calculateMatchScore(applicantText, applicant.requirements || applicant.description || '', applicant.job_title || '');
+            const job = jobsMap[applicant.job_id] || {};
+            const jobTitle = job.title || '';
+            const jobReqs = job.requirements || job.description || '';
+
+            const applicantText = `${jobTitle} ${applicant.first_name || ''} ${applicant.resume_url || ''} ${applicant.cover_letter || ''} ${finalBodyText}`.toLowerCase();
+            const matchResult = await calculateMatchScore(applicantText, jobReqs, jobTitle);
             const score = matchResult.score;
 
             if (score <= 50) {
@@ -162,10 +169,30 @@ router.get('/sync-all', async (req, res) => {
             }
         }
 
-        res.json({ message: 'Dynamic synchronization complete', results });
+        // 2. Auth Reconciliation (Clean up orphaned auth users with no profiles)
+        const { data: { users: authUsers }, error: authListErr } = await supabase.auth.admin.listUsers();
+        if (!authListErr && authUsers) {
+            const { data: profiles } = await all<any>('SELECT id FROM user_profiles');
+            const profileIds = new Set(profiles.map(p => p.id));
+            
+            for (const au of authUsers) {
+                if (!profileIds.has(au.id)) {
+                    // Check if it's a "Ghost" user (no profile and not recently created)
+                    const createdAt = new Date(au.created_at);
+                    const ageInHours = (new Date().getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+                    
+                    if (ageInHours > 1) { // Purge Orphans older than 1 hour
+                        console.log(`[Sync] Purging orphaned auth user: ${au.email}`);
+                        await supabase.auth.admin.deleteUser(au.id);
+                    }
+                }
+            }
+        }
+
+        res.json({ message: 'Synchronization complete.', details: results });
     } catch (error) {
-        console.error('Error syncing applicants:', error);
-        res.status(500).json({ error: 'Failed to sync applicants' });
+        console.error('Error during sync:', error);
+        res.status(500).json({ error: 'Synchronization failed' });
     }
 });
 
@@ -426,17 +453,17 @@ router.put('/:id', async (req, res) => {
         const jobForEmail = await get<any>('SELECT title FROM jobs WHERE id = ?', [existing.job_id]);
 
         const emailHtml = `
-        < div style = "font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;" >
-          <h2 style="color: #1e293b;" > Application Update: ${jobForEmail?.title || 'Job Application'} </h2>
-            < p > Hi ${existing.first_name}, </p>
-              < p > Thank you for taking the time to apply for the < strong > ${jobForEmail?.title || 'position'} </strong> and for your interest in joining our team. We sincerely appreciate the opportunity to review your background.</p >
-                <p>After careful consideration, our team has decided to move forward with other candidates at this time.</p>
-              ${input.rejection_reason ? `<p style="padding: 15px; background: #fef2f2; border-left: 4px solid #ef4444; color: #b91c1c; border-radius: 4px;"><strong>Feedback from our team:</strong><br/>${input.rejection_reason}</p>` : ''}
-    <p>We highly encourage you to apply for future roles with us and wish you the absolute best in your professional journey and future endeavors.</p>
-      < br />
-      <p>Best regards, </p>
-        < p > <strong>The Talent Acquisition Team < /strong></p >
-          </div>
+        <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #1e293b;">Application Update: ${jobForEmail?.title || 'Job Application'}</h2>
+          <p>Hi ${existing.first_name},</p>
+          <p>Thank you for taking the time to apply for the <strong>${jobForEmail?.title || 'position'}</strong> and for your interest in joining our team. We sincerely appreciate the opportunity to review your background.</p>
+          <p>After careful consideration, our team has decided to move forward with other candidates at this time.</p>
+          ${input.rejection_reason ? `<p style="padding: 15px; background: #fef2f2; border-left: 4px solid #ef4444; color: #b91c1c; border-radius: 4px;"><strong>Feedback from our team:</strong><br/>${input.rejection_reason}</p>` : ''}
+          <p>We highly encourage you to apply for future roles with us and wish you the absolute best in your professional journey and future endeavors.</p>
+          <br/>
+          <p>Best regards,</p>
+          <p><strong>The Talent Acquisition Team</strong></p>
+        </div>
             `;
         try {
           await sendEmail({
@@ -500,17 +527,17 @@ router.post('/bulk-update-stage', async (req, res) => {
       for (const a of applicantsToEmail) {
         if (!a.email) continue;
         const emailHtml = `
-    < div style = "font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;" >
-      <h2 style="color: #1e293b;" > Application Update: ${a.job_title || 'Job Application'} </h2>
-        < p > Hi ${a.first_name}, </p>
-          < p > Thank you for taking the time to apply for the < strong > ${a.job_title || 'position'} < /strong> and for your interest in joining our team. We sincerely appreciate the opportunity to review your background.</p >
-            <p>After careful consideration, our team has decided to move forward with other candidates at this time.</p>
-              ${req.body.rejection_reason ? `<p style="padding: 15px; background: #fef2f2; border-left: 4px solid #ef4444; color: #b91c1c; border-radius: 4px;"><strong>Feedback from our team:</strong><br/>${req.body.rejection_reason}</p>` : ''}
-  <p>We highly encourage you to apply for future roles with us and wish you the absolute best in your professional journey and future endeavors.</p>
-    < br />
-    <p>Best regards, </p>
-      < p > <strong>The Talent Acquisition Team < /strong></p >
-        </div>
+    <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #1e293b;">Application Update: ${a.job_title || 'Job Application'}</h2>
+      <p>Hi ${a.first_name},</p>
+      <p>Thank you for taking the time to apply for the <strong>${a.job_title || 'position'}</strong> and for your interest in joining our team. We sincerely appreciate the opportunity to review your background.</p>
+      <p>After careful consideration, our team has decided to move forward with other candidates at this time.</p>
+      ${req.body.rejection_reason ? `<p style="padding: 15px; background: #fef2f2; border-left: 4px solid #ef4444; color: #b91c1c; border-radius: 4px;"><strong>Feedback from our team:</strong><br/>${req.body.rejection_reason}</p>` : ''}
+      <p>We highly encourage you to apply for future roles with us and wish you the absolute best in your professional journey and future endeavors.</p>
+      <br/>
+      <p>Best regards,</p>
+      <p><strong>The Talent Acquisition Team</strong></p>
+    </div>
           `;
         try {
           // Fire and forget
@@ -607,21 +634,21 @@ router.patch('/:id/offer', async (req, res) => {
         to: existing.email,
         subject: `Job Offer from Smart - Cruiter`,
         html: `
-    < h2 > Congratulations ${existing.first_name} !</h2>
-      < p > We are thrilled to offer you the position of < strong > ${existing.job_title} </strong> at Smart-Cruiter Inc.</p >
+    <h2>Congratulations ${existing.first_name}!</h2>
+    <p>We are thrilled to offer you the position of <strong>${existing.job_title}</strong> at Smart-Cruiter Inc.</p>
 
-        <h3>Offer Details: </h3>
-          < ul >
-          <li><strong>Annual Salary: </strong> ${salary}</li >
-            <li><strong>Joining Date: </strong> ${joining_date}</li >
-              </ul>
+    <h3>Offer Details:</h3>
+    <ul>
+      <li><strong>Annual Salary:</strong> ${salary}</li>
+      <li><strong>Joining Date:</strong> ${joining_date}</li>
+    </ul>
           
-          ${notes ? `<h3>Benefits & Notes:</h3><p>${notes}</p>` : ''}
+    ${notes ? `<h3>Benefits & Notes:</h3><p>${notes}</p>` : ''}
 
-  <p>Please log in to your candidate dashboard to view the full offer letter and accept / reject it.</p>
-    < a href = "${process.env.VITE_CLIENT_URL || 'http://localhost:3000'}/candidate/applications/${existing.id}/status" style = "display:inline-block;padding:10px 20px;background:#6366f1;color:white;text-decoration:none;border-radius:5px;margin-top:10px;" > View Offer Details </a>
+    <p>Please log in to your candidate dashboard to view the full offer letter and accept/reject it.</p>
+    <a href="${process.env.VITE_CLIENT_URL || 'http://localhost:3000'}/candidate/applications/${existing.id}/status" style="display:inline-block;padding:10px 20px;background:#6366f1;color:white;text-decoration:none;border-radius:5px;margin-top:10px;">View Offer Details</a>
 
-      < p > Best regards, <br>The Smart - Cruiter Team </p>
+    <p>Best regards,<br>The Smart-Cruiter Team</p>
         `
       });
     } catch (emailError) {

@@ -83,9 +83,23 @@ function parseUpdate(sql: string, params: any[]): { table: string; updates: Reco
   const updates: Record<string, any> = {};
   let paramIdx = 0;
   for (const a of assignments) {
-    const am = a.match(/(\w+)\s*=\s*\?/);
-    if (am) {
-      updates[am[1]] = params[paramIdx++];
+    // 1. Placeholder assignment: col = ?
+    const amPlace = a.match(/^(\w+)\s*=\s*\?$/i);
+    if (amPlace) {
+      updates[amPlace[1]] = params[paramIdx++];
+      continue;
+    }
+    // 2. String literal assignment: col = 'val'
+    const amLiteralStr = a.match(/^(\w+)\s*=\s*'(.*)'$/i);
+    if (amLiteralStr) {
+      updates[amLiteralStr[1]] = amLiteralStr[2].replace(/''/g, "'");
+      continue;
+    }
+    // 3. Number literal assignment: col = 123
+    const amLiteralNum = a.match(/^(\w+)\s*=\s*(\d+)$/i);
+    if (amLiteralNum) {
+      updates[amLiteralNum[1]] = Number(amLiteralNum[2]);
+      continue;
     }
   }
   // Last param is WHERE value
@@ -239,7 +253,7 @@ export async function all<T = any>(sql: string, params: any[] = []): Promise<T[]
     const { count, error } = await query;
     if (error) throw error;
     // Return a shimmed count object to match existing backend expectations
-    return [{ count: String(count || 0) }] as any;
+    return [{ count: Number(count || 0) }] as any;
   }
 
   // Normal SELECT

@@ -14,40 +14,36 @@ router.get('/', async (req, res) => {
   try {
     const { applicant_id, job_id, status } = req.query;
     const companyId = req.headers['x-company-id'];
-    let query = `
-      SELECT i.*, 
-             a.first_name || ' ' || a.last_name as applicant_name,
-             a.email as applicant_email,
-             j.title as job_title
-      FROM interviews i
-      LEFT JOIN applicants a ON i.applicant_id = a.id
-      LEFT JOIN jobs j ON i.job_id = j.id
-      WHERE 1=1
-    `;
-    const params: any[] = [];
+    const [interviews, applicants, jobs] = await Promise.all([
+      all<any>('SELECT * FROM interviews'),
+      all<any>('SELECT id, first_name, last_name, email FROM applicants'),
+      all<any>('SELECT id, title, company_id FROM jobs')
+    ]);
 
-    if (companyId) {
-      query += ' AND j.company_id = ?';
-      params.push(companyId);
-    }
+    const applicantsMap = Object.fromEntries(applicants.map(a => [a.id, a]));
+    const jobsMap = Object.fromEntries(jobs.map(j => [j.id, j]));
 
-    if (applicant_id) {
-      query += ' AND i.applicant_id = ?';
-      params.push(applicant_id);
-    }
-    if (job_id) {
-      query += ' AND i.job_id = ?';
-      params.push(job_id);
-    }
-    if (status) {
-      query += ' AND i.status = ?';
-      params.push(status);
-    }
+    const filteredInterviews = interviews
+      .filter(i => {
+        const applicant = applicantsMap[i.applicant_id];
+        const job = jobsMap[i.job_id];
+        if (!applicant || !job) return false;
+        
+        if (companyId && job.company_id !== companyId) return false;
+        if (applicant_id && i.applicant_id !== applicant_id) return false;
+        if (job_id && i.job_id !== job_id) return false;
+        if (status && i.status !== status) return false;
+        return true;
+      })
+      .map(i => ({
+        ...i,
+        applicant_name: `${applicantsMap[i.applicant_id].first_name} ${applicantsMap[i.applicant_id].last_name}`,
+        applicant_email: applicantsMap[i.applicant_id].email,
+        job_title: jobsMap[i.job_id].title
+      }))
+      .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
 
-    query += ' ORDER BY i.scheduled_at ASC';
-
-    const interviews = await all<any>(query, params);
-    res.json(interviews);
+    res.json(filteredInterviews);
   } catch (error) {
     console.error('Error fetching interviews:', error);
     res.status(500).json({ error: 'Failed to fetch interviews' });
@@ -57,21 +53,22 @@ router.get('/', async (req, res) => {
 // Get interview by ID
 router.get('/:id', async (req, res) => {
   try {
-    const interview = await get<any>(
-      `SELECT i.*, 
-              a.first_name || ' ' || a.last_name as applicant_name,
-              a.email as applicant_email,
-              j.title as job_title
-       FROM interviews i
-       LEFT JOIN applicants a ON i.applicant_id = a.id
-       LEFT JOIN jobs j ON i.job_id = j.id
-       WHERE i.id = ?`,
-      [req.params.id]
-    );
+    const interview = await get<any>('SELECT * FROM interviews WHERE id = ?', [req.params.id]);
     if (!interview) {
       return res.status(404).json({ error: 'Interview not found' });
     }
-    res.json(interview);
+
+    const [applicant, job] = await Promise.all([
+      get('SELECT first_name, last_name, email FROM applicants WHERE id = ?', [interview.applicant_id]),
+      get('SELECT title FROM jobs WHERE id = ?', [interview.job_id])
+    ]);
+
+    res.json({
+      ...interview,
+      applicant_name: applicant ? `${applicant.first_name} ${applicant.last_name}` : 'Unknown Applicant',
+      applicant_email: applicant?.email || '',
+      job_title: job?.title || 'Unknown Position'
+    });
   } catch (error) {
     console.error('Error fetching interview:', error);
     res.status(500).json({ error: 'Failed to fetch interview' });
